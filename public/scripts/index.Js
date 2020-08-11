@@ -4,7 +4,9 @@ let socket,
   localStream,
   existingTracks = [],
   peerConnection,
-  channel;
+  channel,
+  remoteClientId,
+  localClientId;
 
 const turnServerIPAddress = "3.81.63.29";
 const turnServerPort = "3478";
@@ -23,6 +25,11 @@ const configuration = {
     },
   ],
 };
+
+let incomingCallBtn = document.getElementById("incoming-call");
+incomingCallBtn.addEventListener("click", (_) => {
+  createAndSendAnswer(remoteClientId);
+});
 
 const log = console.log;
 const webSocketConnection = "wss://localhost:8000";
@@ -61,63 +68,60 @@ function getUserMedia() {
   }
 }
 
-// getUserMedia();
+getUserMedia();
 
 function connectToWebSocket() {
   socket = io({ transports: ["websocket"] });
 
   socket.on("connect", () => {
-    console.log("socket connected ", socket.connected);
     createRTCPeerConnection();
   });
 
-  socket.on("open", () => {
-    console.log("socket connection opened ", socket);
-  });
-
   socket.on("reconnect_attempt", () => {
-    console.log("reconnect ");
+    // console.log("reconnect ");
     socket.io.opts.transports = ["polling", "websocket"];
   });
 
   socket.on("error", (error) => {
-    console.log(" socket connection error ", error);
+    log(" socket connection error ", error);
   });
 
   socket.on("close", (evt) => {
-    console.log("Web socket connection closed ", evt);
+    log("Web socket connection closed ", evt);
   });
 
   socket.on("disconnect", (evt) => {
-    console.log(" socket disconnected ", !socket.connected);
+    log(" socket disconnected ", !socket.connected);
   });
 
   socket.on("message", (evt) => {
-    console.log("socket message received ", evt);
+    log("socket message received ", evt);
   });
 
   socket.on("update-users-list", ({ users }) => {
-    console.log("update users ", users);
+    log("update users ", users);
     updateUserList(users);
   });
 
   socket.on("remove-user", ({ socketId }) => {
-    console.log("remove user ", socketId);
+    log("remove user ", socketId);
+    removeUser(socketId);
   });
 
   // Handle messages recieved in socket
-  socket.on('request', function (data) {
-    jsonData = event.data;
-    console.log('requst ', data);
+  socket.on("request", function (event) {
+    jsonData = event;
+    log("requst ", event);
+
     switch (jsonData.type) {
       case "candidate":
-        handleCandidate(jsonData.data, jsonData.id);
+        handleCandidate(jsonData);
         break;
       case "offer":
         handleOffer(jsonData);
         break;
       case "answer":
-        handleAnswer(jsonData.data, jsonData.id);
+        handleAnswer(jsonData);
         break;
       default:
         break;
@@ -128,17 +132,16 @@ function connectToWebSocket() {
 }
 
 async function createRTCPeerConnection() {
-  console.log("creating RTCPeerConnection");
   peerConnection = new RTCPeerConnection(configuration);
-
   log("peer ", peerConnection);
 
-  peerConnection.addEventListener("connectionstatechange", (evt) => {
-    log("Connection state changed ", evt, peerConnection);
-  });
+  for (const track of localStream.getTracks()) {
+    existingTracks.push(peerConnection.addTrack(track, localStream));
+  }
 
   peerConnection.ontrack = (evt) => {
     console.log("Received streams ", evt.streams);
+    document.getElementById("remote-video").srcObject = event.streams[0];
   };
 
   peerConnection.ondatachannel = (evt) => {
@@ -146,7 +149,15 @@ async function createRTCPeerConnection() {
   };
 
   peerConnection.onicecandidate = (evt) => {
-    log("ICE Candidate received ", evt.candidate);
+    log("ICE Candidate created ", evt.candidate);
+    if (evt.candidate) {
+      log("Sending ICE Candidate - ", evt.candidate.candidate);
+      socket.emit("request", {
+        id: remoteClientId,
+        candidate: evt.candidate,
+        type: "candidate",
+      });
+    }
   };
 
   peerConnection.onicegatheringstatechange = (evt) => {
@@ -159,6 +170,20 @@ async function createRTCPeerConnection() {
 
   peerConnection.onconnectionstatechange = (evt) => {
     log("Connection state changed ", peerConnection);
+    if (peerConnection.connectionState === "connected") {
+      localStream.getTracks().forEach(function (track, index) {
+        console.log("tracks ", track, "senders ", peerConnection.getSenders());
+        // peerConnection.addTrack(track, localStream);
+        // peerConnection.getSenders().find(function (s) {
+        //   console.log('sender ', s)
+        //   if (s.track.kind == track.kind) {
+        //     s.replaceTrack(track);
+        //   }
+        // });
+      });
+    } else if (peerConnection.connectionState === "disconnected") {
+      log("disconnected ");
+    }
   };
 
   peerConnection.onsignalingstatechange = (evt) => {
@@ -168,13 +193,26 @@ async function createRTCPeerConnection() {
   // createAndSendOffer();
 }
 
+function resetTracks() {
+   localStream.getTracks().forEach(function (track, index) {     
+     peerConnection.addTrack(track, localStream);
+     peerConnection.getSenders().find(function (s) {       
+       if (s.track.kind == track.kind) {
+         s.replaceTrack(track);
+       }
+     });
+   });
+}
+
 function createAndSendOffer(clientId) {
   peerConnection
     .createOffer({ offerToReceiveAudio: 1 })
     .then((offer) => {
       log("offer ", offer);
 
-      socket.emit('request', { id: clientId, data: offer, type: "offer" })
+      remoteClientId = clientId; // set remote clientId to receiver's id
+
+      socket.emit("request", { id: clientId, offer: offer, type: "offer" });
 
       // set offer description
       peerConnection.setLocalDescription(offer);
@@ -182,8 +220,39 @@ function createAndSendOffer(clientId) {
     .catch((err) => log("error creating offer ", err));
 }
 
+function createAndSendAnswer(clientId) {
+  if (!clientId) return;
+  peerConnection
+    .createAnswer()
+    .then((answer) => {
+      log("sending answer ", answer);
+
+      socket.emit("request", { id: clientId, answer: answer, type: "answer" });
+
+      // set offer description
+      peerConnection.setLocalDescription(answer);
+    })
+    .catch((err) => log("error creating answer ", err));
+}
+
 function handleOffer(data) {
-  console.log('handle offer ', data);
+  console.log("handle offer ", data);
+  remoteClientId = data.from;
+  peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+}
+
+function handleAnswer(data) {
+  console.log("handle answer ", data);
+  remoteClientId = data.from;
+  peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+}
+
+function handleCandidate(data) {
+  // if(remoteClientId !== data.from)
+  log("ICE Candidate received - ", data.candidate);
+  peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+
+  // activate button to create answer
 }
 
 function callUser(clientId) {
@@ -193,7 +262,6 @@ function callUser(clientId) {
 
   createAndSendOffer(clientId);
 }
-
 
 function updateUserList(socketIds) {
   const activeUserContainer = document.getElementById("active-user-container");
@@ -228,4 +296,10 @@ function createUserItemContainer(socketId) {
     callUser(socketId);
   });
   return userContainerEl;
+}
+
+function removeUser(userId) {
+  // const activeUserContainer = document.getElementById("active-user-container");
+  const userEl = document.getElementById(userId);
+  userEl.parentNode.removeChild(userEl);
 }

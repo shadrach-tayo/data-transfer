@@ -69,9 +69,7 @@ export class Server {
                         const receiver = this.users[data.id];
                         console.log('receiver ', receiver)
                         if (receiver)
-                            receiver.emit('request', { ...data, from: socket.id, })
-                        
-
+                            receiver.emit('request', { ...data, from: socket.id, })                        
                     }
                 })
 
