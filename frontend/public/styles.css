@@ -1,0 +1,258 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Montserrat", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f9fafc;
+  color: #595354;
+  position: relative;
+  overflow: hidden;
+}
+
+.header {
+  background-color: #ffffff;
+  padding: 10px 20px;
+  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.1);
+}
+
+.header > .logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.header > .logo-container > .logo-img {
+  width: 50px;
+  height: 50px;
+  margin-right: 15px;
+}
+
+.logo-vid {
+  width: 250px;
+  height: 300px;
+}
+
+.header > .logo-container > .logo-text {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.header > .logo-container > .logo-text > .logo-highlight {
+  color: #65a9e5;
+}
+
+.content-container {
+  width: 100%;
+  height: calc(100vh - 89px);
+  display: grid;
+  overflow: hidden;
+}
+
+.make-call {
+  display: grid;
+  align-items: flex-start;
+  justify-content: center;
+  height: 500px;
+}
+
+label {
+  font-size: medium;
+}
+
+input.remote-input {
+  padding: 10px;
+  border-radius: 15px;
+  outline: none;
+}
+
+button.call-btn {
+  padding: 10px;
+  background-color: #6c63ff;
+  border: none;
+  border-radius: 15px;
+}
+
+.overlay_page {
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  /* display: none; */
+  position: absolute;
+  background-color: #161415;
+  will-change: transform;
+  overflow: hidden;
+
+  transform: translate3d(105%, 0, 0);
+  transition: all 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+}
+
+.overlay_page.show {
+  /* display: block; */
+  transform: translate3d(0, 0, 0);
+  opacity: 1;  
+}
+
+.outgoing_call {
+  width: 100%;
+  height: 100%;
+  background-color: palegreen;
+  position: relative;
+}
+
+.active-users-panel {
+  width: 300px;
+  height: 100%;
+  border-right: 1px solid #cddfe7;
+}
+
+.panel-title {
+  margin: 10px 0 0 0;
+  padding-left: 30px;
+  font-weight: 500;
+  font-size: 18px;
+  border-bottom: 1px solid #cddfe7;
+  padding-bottom: 10px;
+}
+
+.active-user {
+  padding: 10px 30px;
+  border-bottom: 1px solid #cddfe7;
+  cursor: pointer;
+  user-select: none;
+}
+
+.active-user:hover {
+  background-color: #e8e9eb;
+  transition: background-color 0.5s ease;
+}
+
+.active-user--selected {
+  background-color: #fff;
+  border-right: 5px solid #65a9e5;
+  font-weight: 500;
+  transition: all 0.5s ease;
+}
+
+.video-chat-container {
+  padding: 0 20px;
+  flex: 1;
+  position: relative;
+}
+
+.talk-info {
+  font-weight: 500;
+  font-size: 21px;
+}
+
+.video-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.control-container {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px;
+  display: grid;
+  align-items: center;
+  /* width: 100%; */
+  background-color: transparent;
+}
+
+.drop-call {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.call-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.remote-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* border: 1px solid #cddfe7; */
+  /* width: 100%; */
+  height: 100%;
+  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.local-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  /* border: 1px solid #cddfe7; */
+  /* width: 100%; */
+  height: 100%;
+  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.mini-video {
+  position: absolute;
+  border: none;
+  right: 0;
+  bottom: 0;
+  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
+  border-radius: 5px;
+  width: 150px;
+  height: 200px;
+}
+
+.incoming-call {
+  background-color: rgb(175, 174, 230);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+
+.icon-button {
+  display: flex;  
+  align-items: center;
+  height: 60px;
+  width: 60px;
+  border: none;
+  background: rgb(53, 54, 54);
+  border-radius: 50%;
+  outline: none;
+}
+
+button.drop-call {
+  background: rgb(224, 61, 61);
+}
+
+i.icon {
+  width: 100%;
+  height: 100%;
+  display: inline-block;
+  background-size: 70%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.end-call {
+  background-image: url(img/end-call.svg);
+  
+}
+
+.switch-camera {
+  background-image: url(img/switch-camera.svg);
+}
+
+.video-off {
+  background-image: url(img/video-off.svg);
+}
+
+.mic-off {
+  background-image: url(img/mic-off.svg);
+}

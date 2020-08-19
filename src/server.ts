@@ -32,7 +32,7 @@ export class Server {
     }
 
     private configureApp(): void {
-        this.app.use(express.static(path.join(__dirname, '../public')))
+        this.app.use(express.static(path.join(__dirname, '../frontend/public')))
     }
 
     private handleRoutes(): void {
@@ -43,7 +43,7 @@ export class Server {
 
     private handleSocketConnection(): void {
         this.io.on('connection', (socket: any) => {
-            console.log("Socket connected. ", socket.id)
+            // console.log("Socket connected. ", socket.id)
             const existingSocket = this.activeSockets.find((existingSocket: any) => existingSocket.id === socket.id)
 
             if (!existingSocket) {
@@ -67,7 +67,7 @@ export class Server {
 
                     if (data.id) {
                         const receiver = this.users[data.id];
-                        console.log('receiver ', receiver)
+                        // console.log('receiver ', receiver)
                         if (receiver)
                             receiver.emit('request', { ...data, from: socket.id, })                        
                     }
