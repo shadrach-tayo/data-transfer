@@ -7,7 +7,7 @@
     "start": "ts-node src/index.ts",
     "start:client": "live-server --open=frontend/public",
     "build:client": "rollup --config frontend/config/rollup.config.dev.js -w",
-    "dev": "npm run build:client && nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

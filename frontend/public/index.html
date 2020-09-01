@@ -18,7 +18,7 @@
         <div class="logo-container">
           <img src="./img/doge.png" alt="doge logo" class="logo-img" />
           <h1 class="logo-text">
-            Chat<span class="logo-highlight">vids</span>
+            Chat<span class="logo-highlight">app</span>
           </h1>
         </div>
       </header>
@@ -29,14 +29,15 @@
             alt="video call logo"
             class="logo-vid"
           />
+          <p>Your ID is: <span id="localId"></span></p>
           <label for="remote-name">Enter username to connect</label>
           <input
             type="text"
             class="remote-input"
             placeholder="nighting gale"
-            id="remote-name"
+            id="remote-id"
           />
-          <button class="call-btn">Call</button>
+          <button class="call-btn" id="call-btn">Call</button>
         </div>
         <!-- <div class="active-users-panel" id="active-user-container">
          <h3 class="panel-title">Active Users:</h3>
@@ -53,7 +54,7 @@
        </div> -->
       </div>
     </div>
-    <div class="overlay_page show">
+    <div class="overlay_page" id="call-modal">
       <div class="outgoing_call">
         <div class="video-container">
           <video autoplay class="remote-video" id="remote-video"></video>
@@ -62,19 +63,22 @@
         </div>
       </div>
       <div class="control-container">
-        <div class="drop-call">
-          <button class="icon-button drop-call">
+        <div class="call-states">
+          <button class="icon-button drop-call call-state" id="drop-call">
             <i class="icon end-call"></i>
           </button>
-        </div>
+          <button class="icon-button pick-call call-state show" id="pick-call">
+            <i class="icon end-call"></i>
+          </button>
+        </div>       
         <div class="call-controls">
-          <button class="icon-button">
+          <button class="icon-button" id="switch-camera">
             <i class="icon switch-camera"></i>
           </button>
-          <button class="icon-button">
+          <button class="icon-button" id="toggle-video">
             <i class="icon video-off"></i>
           </button>
-          <button class="icon-button">
+          <button class="icon-button" id="toggle-audio">
             <i class="icon mic-off"></i>
           </button>
         </div>

@@ -72,34 +72,6 @@ button.call-btn {
   border-radius: 15px;
 }
 
-.overlay_page {
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  /* display: none; */
-  position: absolute;
-  background-color: #161415;
-  will-change: transform;
-  overflow: hidden;
-
-  transform: translate3d(105%, 0, 0);
-  transition: all 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
-}
-
-.overlay_page.show {
-  /* display: block; */
-  transform: translate3d(0, 0, 0);
-  opacity: 1;  
-}
-
-.outgoing_call {
-  width: 100%;
-  height: 100%;
-  background-color: palegreen;
-  position: relative;
-}
-
 .active-users-panel {
   width: 300px;
   height: 100%;
@@ -145,6 +117,35 @@ button.call-btn {
   font-size: 21px;
 }
 
+
+.overlay_page {
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  /* display: none; */
+  position: absolute;
+  background-color: #161415;
+  will-change: transform;
+  overflow: hidden;
+
+  transform: translate3d(105%, 0, 0);
+  transition: all 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
+}
+
+.overlay_page.show {
+  /* display: block; */
+  transform: translate3d(0, 0, 0);
+  opacity: 1;  
+}
+
+.outgoing_call {
+  width: 100%;
+  height: 100%;
+  background-color: palegreen;
+  position: relative;
+}
+
 .video-container {
   width: 100%;
   height: 100%;
@@ -163,11 +164,48 @@ button.call-btn {
   background-color: transparent;
 }
 
-.drop-call {
+.call-state {
+  visibility: hidden;
+  max-width: 0;
+}
+
+.incoming .pick-call {
+  max-width: 60px;
+  visibility: visible;
+}
+
+.incoming .drop-call {
+  max-width: 60px;
+  visibility: visible;
+}
+
+.accepted .drop-call {
+  max-width: 60px;
+  visibility: visible;
+}
+
+.accepted .pick-call {
+  max-width: 60px;
+  display: none;
+}
+
+.outgoing .drop-call {
+  max-width: 60px;
+  visibility: visible;
+}
+
+.outgoing .pick-call {
+  max-width: 0;
+  display: none;
+}
+
+
+.call-states {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 30px;
+  margin-bottom: 30px;  
+  gap: 30px;
 }
 
 .call-controls {
@@ -229,6 +267,10 @@ button.call-btn {
 
 button.drop-call {
   background: rgb(224, 61, 61);
+}
+
+button.pick-call {
+  background: rgb(49, 201, 112);
 }
 
 i.icon {

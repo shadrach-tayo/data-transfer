@@ -1,12 +1,201 @@
 
 (function(l, r) { if (l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (window.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(window.document);
 const { RTCPeerConnection, RTCSessionDescription } = window;
+const log = console.log;
 
-let socket,
-  localStream,
-  peerConnection,
-  channel,
-  remoteClientId;
+
+const localVideo = document.getElementById("local-video");
+const remoteVideo = document.getElementById("remote-video");
+const miniVideo = document.getElementById("mini-video");
+const callModal = document.getElementById("call-modal");
+
+class PeerConnection {
+  constructor(config, stream, socket) {
+    this.socket = socket;
+    this.stream = stream;
+    this.config = config;
+    this.existingTracks = [];
+    this.createPeerConnection();
+  }
+
+  createPeerConnection() {
+    this.peerConnection = new RTCPeerConnection(this.config);
+    this.addLocalStream();
+    this.listenToPeerEvents();
+  }
+
+  startRemoteConnection(clientId) {
+    if (this.channel) channel.close();
+
+    this.channel = this.peerConnection.createDataChannel("chat-channel");
+
+    this.remoteClientId = clientId;
+    this.createOffer(clientId);
+  }
+
+  listenToPeerEvents() {
+    this.peerConnection.ontrack = (evt) => {
+      console.log("Received streams ", evt.streams);
+      document.getElementById("remote-video").srcObject = event.streams[0];
+    };
+
+    this.peerConnection.ondatachannel = (evt) => {
+      log("Received data channel ", evt.channel);
+    };
+
+    this.peerConnection.onicecandidate = (evt) => {
+      log("ICE Candidate created ", evt.candidate);
+      if (evt.candidate) {
+        log("Sending ICE Candidate - ", evt.candidate.candidate);
+        this.socket.emit("request", {
+          id: this.remoteClientId,
+          candidate: evt.candidate,
+          type: "candidate",
+        });
+      }
+    };
+
+    this.peerConnection.onicegatheringstatechange = (evt) => {
+      log("ICE Candidate gathering state ", evt);
+    };
+
+    this.peerConnection.onicecandidateerror = (err) => {
+      log("ICE candidate error ", err);
+    };
+
+    this.peerConnection.onconnectionstatechange = (evt) => {
+      log("Connection state changed ", this.peerConnection);
+      if (this.peerConnection.connectionState === "connected") {
+        this.stream.getTracks().forEach((track, index) => {
+          console.log(
+            "tracks ",
+            track,
+            "senders ",
+            this.peerConnection.getSenders()
+          );
+        });
+      } else if (
+        this.peerConnection.connectionState === "disconnected" ||
+        this.peerConnection.connectionState === "failed"
+      ) {
+        miniVideo.srcObject = null;
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+
+        callModal.classList.remove("show");
+
+        callModal.classList.remove(CALL_STATES.INCOMING);
+        callModal.classList.remove(CALL_STATES.ACCEPTED);
+        callModal.classList.remove(CALL_STATES.OUTGOING);
+
+        this.peerConnection.close();
+        log("disconnected ");
+      }
+    };
+
+    this.peerConnection.onsignalingstatechange = (evt) => {
+      log("signaling state changed ", evt, this.peerConnection);
+    };
+  }
+
+  addLocalStream(stream) {
+    for (const track of this.stream.getTracks()) {
+      this.existingTracks.push(
+        this.peerConnection.addTrack(track, this.stream)
+      );
+    }
+  }
+
+  createAnswer(clientId = this.remoteClientId) {
+    if (clientId != this.remoteClientId) return;
+    this.peerConnection
+      .createAnswer()
+      .then((answer) => {
+        log("sending answer ", answer);
+
+        this.socket.emit("request", {
+          id: clientId,
+          answer: answer,
+          type: "answer",
+        });
+
+        // set offer description
+        this.peerConnection.setLocalDescription(answer);
+      })
+      .catch((err) => log("error creating answer ", err));
+  }
+
+  handleAnswer(data) {
+    console.log("handle answer ", data);
+    this.remoteClientId = data.from;
+    this.peerConnection.setRemoteDescription(
+      new RTCSessionDescription(data.answer)
+    );
+  }
+
+  createOffer(clientId) {
+    this.peerConnection
+      .createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 })
+      .then((offer) => {
+        log("offer ", offer);
+
+        this.remoteClientId = clientId; // set remote clientId to receiver's id
+
+        this.socket.emit("request", {
+          id: clientId,
+          offer: offer,
+          type: "offer",
+        });
+
+        // set offer description
+        this.peerConnection.setLocalDescription(offer);
+      })
+      .catch((err) => log("error creating offer ", err));
+  }
+
+  handleOffer(data) {
+    console.log("handle offer ", data);
+    this.remoteClientId = data.from;
+    this.peerConnection.setRemoteDescription(
+      new RTCSessionDescription(data.offer)
+    );
+  }
+
+  resetTracks() {
+    let peer = this;
+    this.stream.getTracks().forEach(function (track, index) {
+      peer.peerConnection.addTrack(track, peer.stream);
+      peer.peerConnection.getSenders().find(function (s) {
+        if (s.track.kind == track.kind) {
+          s.replaceTrack(track);
+        }
+      });
+    });
+  }
+
+  toggleMediaStreamTrack(type, on = false) {
+    if (this.stream) {
+      this.stream[`get${type}Tracks`]().forEach((track) => {
+        track.enabled = on;
+        console.log('type ', track, on);
+      });
+    }
+  }
+
+  updateStream(stream) {
+    this.stream = stream;
+    this.resetTracks();
+  }
+
+  addIceCandidate(data) {
+    log("ICE Candidate received - ", data.candidate);
+    this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+
+  close() {
+    this.peerConnection.close();
+  }
+}
 
 const turnServerIPAddress = "3.81.63.29";
 const turnServerPort = "3478";
@@ -26,177 +215,17 @@ const configuration = {
   ],
 };
 
-let cameraConfig = {
-  video: true,
-  audio: true,
-};
-
-class PeerConnection {
-  constructor(config, stream) {
-    this.stream = stream;
-    this.config = config;
-    this.existingTracks = [];
-    this.createPeerConnection();
-  }
-
-  createPeerConnection() {
-    this.peerConnection = new RTCPeerConnection(this.config);
-    this.addLocalStream();
-    this.listenToPeerEvents();
-  }
-
-  startRemoteConnection(clientId) {
-    if (this.channel) channel.close();
-
-    this.channel = this.peerConnection.createDataChannel("chat-channel");
-
-    this.createOffer(clientId);
-  }
-
-  listenToPeerEvents() {
-    this.peerConnection.ontrack = (evt) => {
-      console.log("Received streams ", evt.streams);
-      document.getElementById("remote-video").srcObject = event.streams[0];
-    };
-
-    this.peerConnection.ondatachannel = (evt) => {
-      log("Received data channel ", evt.channel);
-    };
-
-    this.peerConnection.onicecandidate = (evt) => {
-      log("ICE Candidate created ", evt.candidate);
-      if (evt.candidate) {
-        log("Sending ICE Candidate - ", evt.candidate.candidate);
-        socket.emit("request", {
-          id: remoteClientId,
-          candidate: evt.candidate,
-          type: "candidate",
-        });
-      }
-    };
-
-    this.peerConnection.onicegatheringstatechange = (evt) => {
-      log("ICE Candidate gathering state ", evt);
-    };
-
-    this.peerConnection.onicecandidateerror = (err) => {
-      log("ICE candidate error ", err);
-    };
-
-    this.peerConnection.onconnectionstatechange = (evt) => {
-      log("Connection state changed ", this.peerConnection);
-      if (this.peerConnection.connectionState === "connected") {
-        this.stream.getTracks().forEach(function (track, index) {
-          console.log(
-            "tracks ",
-            track,
-            "senders ",
-            this.peerConnection.getSenders()
-          );
-          // this.peerConnection.addTrack(track, localStream);
-          // this.peerConnection.getSenders().find(function (s) {
-          //   console.log('sender ', s)
-          //   if (s.track.kind == track.kind) {
-          //     s.replaceTrack(track);
-          //   }
-          // });
-        });
-      } else if (this.peerConnection.connectionState === "disconnected") {
-        log("disconnected ");
-      }
-    };
-
-    this.peerConnection.onsignalingstatechange = (evt) => {
-      log("signaling state changed ", evt, this.peerConnection);
-    };
-  }
-
-  addLocalStream(stream) {
-    for (const track of this.stream.getTracks()) {
-      this.existingTracks.push(
-        this.peerConnection.addTrack(track, this.stream)
-      );
-    }
-  }
-
-  createAnswer(clientId) {
-    if (!clientId) return;
-    this.peerConnection
-      .createAnswer()
-      .then((answer) => {
-        log("sending answer ", answer);
-
-        socket.emit("request", {
-          id: clientId,
-          answer: answer,
-          type: "answer",
-        });
-
-        // set offer description
-        this.peerConnection.setLocalDescription(answer);
-      })
-      .catch((err) => log("error creating answer ", err));
-  }
-
-  handleAnswer(data) {
-    console.log("handle answer ", data);
-    remoteClientId = data.from;
-    this.peerConnection.setRemoteDescription(
-      new RTCSessionDescription(data.answer)
-    );
-  }
-
-  createOffer(clientId) {
-    this.peerConnection
-      .createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 })
-      .then((offer) => {
-        log("offer ", offer);
-
-        remoteClientId = clientId; // set remote clientId to receiver's id
-
-        socket.emit("request", { id: clientId, offer: offer, type: "offer" });
-
-        // set offer description
-        this.peerConnection.setLocalDescription(offer);
-      })
-      .catch((err) => log("error creating offer ", err));
-  }
-
-  handleOffer(data) {
-    console.log("handle offer ", data);
-    remoteClientId = data.from;
-    this.peerConnection.setRemoteDescription(
-      new RTCSessionDescription(data.offer)
-    );
-  }
-
-  resetTracks() {
-    let peer = this;
-    this.stream.getTracks().forEach(function (track, index) {
-      peer.peerConnection.addTrack(track, peer.stream);
-      peer.peerConnection.getSenders().find(function (s) {
-        if (s.track.kind == track.kind) {
-          s.replaceTrack(track);
-        }
-      });
-    });
-  }
-
-  updateStream(stream) {
-    this.stream = stream;
-    this.resetTracks();
-  }
-
-  addIceCandidate(data) {
-    log("ICE Candidate received - ", data.candidate);
-    this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-}
-
-const log = console.log;
+const log$1 = console.log;
 const webSocketConnection = "wss://localhost:8000";
 
-function getUserLocalMedia() {
+const CALL_STATES$1 = {
+  ACCEPTED: "accepted",
+  INCOMING: "incoming",
+  OUTGOING: "outgoing",
+};
+
+function getUserLocalMedia(cameraConfig) {
+  console.log('config ', cameraConfig);
   return new Promise((resolve, reject) => {
     navigator.getWebCam =
       navigator.getUserMedia ||
@@ -206,163 +235,231 @@ function getUserLocalMedia() {
       navigator.msGetUserMedia;
 
     if (navigator.getWebCam) {
-      navigator.getUserMedia(
-        cameraConfig,
-        resolve,
-        reject
-      );
+      navigator.getUserMedia(cameraConfig, resolve, reject);
     } else {
-      navigator.mediaDevices
-        .getUserMedia({ video: true, audio: true })
-        .then(resolve, reject);
+      navigator.mediaDevices.getUserMedia(cameraConfig).then(resolve, reject);
     }
   });
 
   // function getMediaSuccess(stream) {}
 }
 
-getUserLocalMedia()
-  .then((stream) => {
-    const localVideo = document.getElementById("local-video");
-    localStream = stream;
-    console.log("tracks ", localStream.getTracks());
+function setLocalId(id) {
+  document.getElementById("localId").textContent = id;
+}
 
-    if (localVideo) {
-      localVideo.srcObject = stream;
-      connectToWebSocket();
+const localVideo$1 = document.getElementById("local-video");
+const remoteVideo$1 = document.getElementById("remote-video");
+const miniVideo$1 = document.getElementById("mini-video");
+const callBtn = document.getElementById("call-btn");
+const callModal$1 = document.getElementById("call-modal");
+const remoteIdInput = document.getElementById("remote-id");
+
+// call controll buttons
+const pickCall = document.getElementById("pick-call");
+const dropCall = document.getElementById("drop-call");
+const switchCamera = document.getElementById("switch-camera");
+const toggleVideo = document.getElementById("toggle-video");
+const toggleAudio = document.getElementById("toggle-audio");
+
+class Application {
+  constructor() {
+    console.log("app");
+    this.displayVideo = true;
+    this.displayAudio = true;
+    this.cameraConfig = {
+      video: true,
+      audio: true,
+    };
+    this.initializeSocketAndStream();
+  }
+
+  initializeSocketAndStream() {
+    console.log("camera ", this.cameraConfig);
+    getUserLocalMedia(this.cameraConfig)
+      .then((stream) => {
+        let localVideo = document.getElementById("local-video");
+        this.localStream = stream;
+        console.log("track", this.localStream.getTracks());
+
+        if (localVideo) {
+          // localVideo.srcObject = stream;
+          try {
+            this.connectToWebSocket();
+            console.log("app socket ", this.socket);
+          } catch (e) {
+            console.log("Couldn\t connect to web sockets");
+          }
+        }
+      })
+      .catch((error) => {
+        console.log("error: could not access webcam  ", error);
+      });
+  }
+
+  connectToWebSocket() {
+    this.socket = io(webSocketConnection);
+
+    this.socket.on("connect", () => {
+      // createRTCPeerConnection();
+      console.log("connected ", this.socket);
+      setLocalId(this.socket.id);
+      // peerConnection = new PeerConnection(configuration, localStream);
+    });
+
+    this.socket.on("reconnect_attempt", () => {
+      // console.log("reconnect ");
+      this.socket.io.opts.transports = ["polling", "websocket"];
+    });
+
+    this.socket.on("error", (error) => {
+      log$1(" socket connection error ", error);
+    });
+
+    this.socket.on("close", (evt) => {
+      log$1("Web socket connection closed ", evt);
+    });
+
+    this.socket.on("disconnect", (evt) => {
+      log$1(" socket disconnected ", !this.socket.connected);
+    });
+
+    this.socket.on("message", (evt) => {
+      log$1("socket message received ", evt);
+    });
+
+    this.socket.on("update-users-list", ({ users }) => {
+      log$1("update users ", users);
+      // updateUserList(users);
+    });
+
+    this.socket.on("remove-user", ({ socketId }) => {
+      log$1("remove user ", socketId);
+      // removeUser(socketId);
+    });
+
+    // Handle messages recieved in socket
+    this.socket.on("request", (event) => {
+      log$1("requst ", this);
+      let jsonData = event;
+
+      switch (jsonData.type) {
+        case "candidate":
+          this.peerConnection.addIceCandidate(jsonData);
+          break;
+        case "offer":
+          this.handleIncomingCall(jsonData);
+          // this.peerConnection.handleOffer(jsonData);
+          break;
+        case "answer":
+          this.peerConnection.handleAnswer(jsonData);
+          break;
+      }
+    });
+
+    socket.connect(webSocketConnection);
+    return socket;
+  }
+
+  startCall(remoteClientId) {
+    this.remoteClientId = remoteClientId;
+    if (this.peerConnection) {
+      this.peerConnection.close();
     }
-  })
-  .catch((error) => {
-    console.log("error: could not access webcam  ", error);
-  });
 
-function connectToWebSocket() {
-  socket = io({ transports: ["websocket"] });
+    this.peerConnection = new PeerConnection(
+      configuration,
+      this.localStream,
+      this.socket
+    );
+    this.peerConnection.startRemoteConnection(this.remoteClientId);
+    miniVideo$1.srcObject = this.localStream;
 
-  socket.on("connect", () => {
-    // createRTCPeerConnection();
-    peerConnection = new PeerConnection(configuration, localStream);
-  });
+    callModal$1.classList.add("show");
+    callModal$1.classList.add(CALL_STATES$1.OUTGOING);
+  }
 
-  socket.on("reconnect_attempt", () => {
-    // console.log("reconnect ");
-    socket.io.opts.transports = ["polling", "websocket"];
-  });
+  handleIncomingCall(data) {
+    this.offerData = data;
+    this.remoteClientId = data.from;
 
-  socket.on("error", (error) => {
-    log(" socket connection error ", error);
-  });
-
-  socket.on("close", (evt) => {
-    log("Web socket connection closed ", evt);
-  });
-
-  socket.on("disconnect", (evt) => {
-    log(" socket disconnected ", !socket.connected);
-  });
-
-  socket.on("message", (evt) => {
-    log("socket message received ", evt);
-  });
-
-  socket.on("update-users-list", ({ users }) => {
-    log("update users ", users);
-    updateUserList(users);
-  });
-
-  socket.on("remove-user", ({ socketId }) => {
-    log("remove user ", socketId);
-    removeUser(socketId);
-  });
-
-  // Handle messages recieved in socket
-  socket.on("request", function (event) {
-    jsonData = event;
-    log("requst ", event);
-
-    switch (jsonData.type) {
-      case "candidate":
-        peerConnection.addIceCandidate(jsonData);
-        break;
-      case "offer":
-        peerConnection.handleOffer(jsonData);
-        break;
-      case "answer":
-        peerConnection.handleAnswer(jsonData);
-        break;
+    if (this.peerConnection) {
+      this.peerConnection.close();
     }
-  });
 
-  socket.connect(webSocketConnection);
-}
+    this.peerConnection = new PeerConnection(
+      configuration,
+      this.localStream,
+      this.socket
+    );
+    this.peerConnection.handleOffer(this.offerData);
 
-// function handleOffer(data) {
-//   console.log("handle offer ", data);
-//   remoteClientId = data.from;
-//   peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-// }
+    callModal$1.classList.add("show");
+    callModal$1.classList.add(CALL_STATES$1.INCOMING);
+    // this.peerConnection.startRemoteConnection(this.remoteClientId)
+  }
 
-// function handleAnswer(data) {
-//   console.log("handle answer ", data);
-//   remoteClientId = data.from;
-//   peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-// }
+  acceptCall() {
+    this.peerConnection.createAnswer(this.remoteClientId);
+    miniVideo$1.srcObject = this.localStream;
+  }
 
-// function handleCandidate(data) {
-//   // if(remoteClientId !== data.from)
-//   log("ICE Candidate received - ", data.candidate);
-//   peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  declineCall() {
+    this.peerConnection.close();
 
-//   // activate button to create answer
-// }
+    miniVideo$1.srcObject = null;
+    localVideo$1.srcObject = null;
+    remoteVideo$1.srcObject = null;
 
-function callUser(clientId) {
-  console.log("starting call........ ", clientId);
-  peerConnection.startRemoteConnection(clientId);
-}
+    callModal$1.classList.remove("show");
 
-function updateUserList(socketIds) {
-  const activeUserContainer = document.getElementById("active-user-container");
+    callModal$1.classList.remove(CALL_STATES$1.INCOMING);
+    callModal$1.classList.remove(CALL_STATES$1.ACCEPTED);
+    callModal$1.classList.remove(CALL_STATES$1.OUTGOING);
+  }
 
-  socketIds.forEach((socketId) => {
-    const alreadyExistingUser = document.getElementById(socketId.id);
-    if (!alreadyExistingUser) {
-      const userContainerEl = createUserItemContainer(socketId.id);
-      activeUserContainer.appendChild(userContainerEl);
+  toggleMediaStreamTrack(type, on = false) {
+    if (this.localStream) {
+      this.localStream[`get${type}Tracks`]().forEach((track) => {
+        track.enabled = on;
+      });
     }
-  });
+  }
+
+  toggleVideo() {
+    this.displayVideo = !this.displayVideo;
+    this.peerConnection.toggleMediaStreamTrack('Video', this.displayVideo);
+    
+  }
+  
+  toggleAudio() {
+    this.displayAudio = !this.displayAudio;
+    this.peerConnection.toggleMediaStreamTrack('Audio', this.displayAudio);
+  }
 }
 
-function createUserItemContainer(socketId) {
-  const userContainerEl = document.createElement("div");
+const app = new Application();
 
-  const usernameEl = document.createElement("p");
+callBtn.onclick = () => {
+  console.log('call ', remoteIdInput.value);
+  app.startCall(remoteIdInput.value.trim());
+};
 
-  userContainerEl.setAttribute("class", "active-user");
-  userContainerEl.setAttribute("id", socketId);
-  usernameEl.setAttribute("class", "username");
-  usernameEl.innerHTML = `Socket: ${socketId}`;
+pickCall.onclick = () => {
+  app.acceptCall();
+  callModal$1.classList.remove(CALL_STATES$1.INCOMING);
+  callModal$1.classList.add(CALL_STATES$1.ACCEPTED);
+};
 
-  userContainerEl.appendChild(usernameEl);
+/**
+ * TODO:
+ * 1. send decline signal over socket, to notifiy  caller of declined call state
+ */
+dropCall.onclick = () => {
+  app.declineCall();
+  callModal$1.classList.remove(CALL_STATES$1.INCOMING);
+  callModal$1.classList.remove(CALL_STATES$1.ACCEPTED);
+};
 
-  userContainerEl.addEventListener("click", () => {
-    // unselectUsersFromList();
-
-    userContainerEl.setAttribute("class", "active-user active-user--selected");
-    const talkingWithInfo = document.getElementById("talking-with-info");
-    talkingWithInfo.innerHTML = `Talking with: "Socket: ${socketId}"`;
-    callUser(socketId);
-  });
-  return userContainerEl;
-}
-
-function removeUser(userId) {
-  // const activeUserContainer = document.getElementById("active-user-container");
-  const userEl = document.getElementById(userId);
-  userEl.parentNode.removeChild(userEl);
-}
-
-let incomingCallBtn = document.getElementById("incoming-call");
-incomingCallBtn.addEventListener("click", (_) => {
-  peerConnection.createAnswer(remoteClientId);
-});
+toggleVideo.onclick = app.toggleVideo.bind(app);
+toggleAudio.onclick = app.toggleAudio.bind(app);
