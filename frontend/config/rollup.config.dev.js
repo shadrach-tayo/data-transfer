@@ -1,5 +1,7 @@
 import serve from "rollup-plugin-serve";
 import livereload from "rollup-plugin-livereload";
+import replace from "rollup-plugin-replace";
+
 
 // rollup.config.js
 export default {
@@ -9,6 +11,10 @@ export default {
     format: "esm",
   },
   plugins: [
+    replace({
+      deliminters: ["{{", "}}"],
+      SOCKET_URL: "wss://localhost:8000",
+    }),
     serve({
       open: true,
       openPage: "/",

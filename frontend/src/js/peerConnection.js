@@ -7,6 +7,13 @@ const remoteVideo = document.getElementById("remote-video");
 const miniVideo = document.getElementById("mini-video");
 const callModal = document.getElementById("call-modal");
 
+
+const CALL_STATES = {
+  ACCEPTED: "accepted",
+  INCOMING: "incoming",
+  OUTGOING: "outgoing",
+};
+
 class PeerConnection {
   constructor(config, stream, socket) {
     this.socket = socket;

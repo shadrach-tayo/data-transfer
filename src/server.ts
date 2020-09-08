@@ -4,7 +4,12 @@ import { createServer, Server as HTTPServer } from "https"
 import path from "path"
 import fs from 'fs'
 
-
+/* 
+{
+            key: fs.readFileSync(path.join(__dirname, '/server.key'), 'utf-8'),
+            cert: fs.readFileSync(path.join(__dirname, '/server.crt'), 'utf-8')
+        },
+        */
 export class Server {
     private httpServer: HTTPServer;
     private app: Application;
@@ -12,7 +17,7 @@ export class Server {
     private activeSockets: Array<any> = []
     private users: any = {}
 
-    private readonly DEFAULT_PORT = 8000;
+    private readonly DEFAULT_PORT = process.env.PORT || 8080;
 
     constructor() {
         this.initialize();
@@ -21,8 +26,8 @@ export class Server {
     private initialize(): void {
         this.app = express();
         this.httpServer = createServer({
-            key: fs.readFileSync(path.join(__dirname, '/server.key'), 'utf-8'),
-            cert: fs.readFileSync(path.join(__dirname, '/server.crt'), 'utf-8')
+            key: fs.readFileSync(path.join(process.cwd(), '/server.key'), 'utf-8'),
+            cert: fs.readFileSync(path.join(process.cwd(), '/server.crt'), 'utf-8')
         }, this.app);
         this.io = socketIO(this.httpServer);
 
@@ -69,7 +74,7 @@ export class Server {
                         const receiver = this.users[data.id];
                         // console.log('receiver ', receiver)
                         if (receiver)
-                            receiver.emit('request', { ...data, from: socket.id, })                        
+                            receiver.emit('request', { ...data, from: socket.id, })
                     }
                 })
 
@@ -77,7 +82,7 @@ export class Server {
         })
     }
 
-    public listen(callback: (port: number) => void): void {
+    public listen(callback: (port: any) => void): void {
         this.httpServer.listen(this.DEFAULT_PORT, () => callback(this.DEFAULT_PORT))
     }
 }

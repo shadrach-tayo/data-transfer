@@ -1,12 +1,25 @@
 version: "3"
 
 services:
-  web:
-    dockerfile:
+  # mongod:
+  #   image: mongo
+  #   restart: always
+  #   ports:
+  #     - 27017:27017
+  server:
+    build:
       context: .
-      build: Dockerfile.dev
-    ports:
-      - 8000:8000
+      dockerfile: Dockerfile.dev
     volumes:
-      - /app/node_modules
-      - .:/app
+      - /usr/app/node_modules
+      - .:/usr/app/
+    ports:
+      - 8080:8080
+  # test:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   volumes:
+  #     - /usr/app/node_modules
+  #     - .:/usr/app/
+    # command: ["npm", "run", "dev"]

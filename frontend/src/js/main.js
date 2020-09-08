@@ -19,7 +19,7 @@ const configuration = {
 };
 
 const log = console.log;
-const webSocketConnection = "wss://localhost:8000";
+const webSocketConnection = "SOCKET_URL";
 
 const CALL_STATES = {
   ACCEPTED: "accepted",

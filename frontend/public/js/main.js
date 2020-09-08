@@ -1,5 +1,3 @@
-
-(function(l, r) { if (l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (window.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(window.document);
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log = console.log;
 
@@ -8,6 +6,13 @@ const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
 const miniVideo = document.getElementById("mini-video");
 const callModal = document.getElementById("call-modal");
+
+
+const CALL_STATES = {
+  ACCEPTED: "accepted",
+  INCOMING: "incoming",
+  OUTGOING: "outgoing",
+};
 
 class PeerConnection {
   constructor(config, stream, socket) {
@@ -216,7 +221,7 @@ const configuration = {
 };
 
 const log$1 = console.log;
-const webSocketConnection = "wss://localhost:8000";
+const webSocketConnection = "";
 
 const CALL_STATES$1 = {
   ACCEPTED: "accepted",

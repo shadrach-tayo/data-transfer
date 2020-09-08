@@ -5,7 +5,10 @@
         "target": "es6",
         "moduleResolution": "node",
         "sourceMap": true,
-        "outDir": "dist"
+        // "outDir": "dist",
+        "outDir": "./build", /* Redirect output structure to the directory. */
+        "rootDir": "./src",
+        
     },
     "lib": [
         "es2015"
