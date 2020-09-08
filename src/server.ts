@@ -5,11 +5,10 @@ import path from "path"
 import fs from 'fs'
 
 /* 
-{
-            key: fs.readFileSync(path.join(__dirname, '/server.key'), 'utf-8'),
-            cert: fs.readFileSync(path.join(__dirname, '/server.crt'), 'utf-8')
-        },
-        */
+{key: fs.readFileSync(path.join(__dirname, '/server.key'), 'utf-8'),
+   cert: fs.readFileSync(path.join(__dirname, '/server.crt'), 'utf-8')
+},
+*/
 export class Server {
     private httpServer: HTTPServer;
     private app: Application;
