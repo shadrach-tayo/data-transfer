@@ -1,3 +1,5 @@
+
+(function(l, r) { if (l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (window.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(window.document);
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log = console.log;
 
@@ -221,7 +223,7 @@ const configuration = {
 };
 
 const log$1 = console.log;
-const webSocketConnection = "";
+const webSocketConnection = "wss://localhost:8000";
 
 const CALL_STATES$1 = {
   ACCEPTED: "accepted",
@@ -230,7 +232,7 @@ const CALL_STATES$1 = {
 };
 
 function getUserLocalMedia(cameraConfig) {
-  console.log('config ', cameraConfig);
+  console.log("config ", cameraConfig);
   return new Promise((resolve, reject) => {
     navigator.getWebCam =
       navigator.getUserMedia ||
@@ -251,6 +253,10 @@ function getUserLocalMedia(cameraConfig) {
 
 function setLocalId(id) {
   document.getElementById("localId").textContent = id;
+}
+
+function setLocalName(name) {
+  document.getElementById("peerName").textContent = name;
 }
 
 const localVideo$1 = document.getElementById("local-video");
@@ -276,6 +282,12 @@ class Application {
       video: true,
       audio: true,
     };
+    this.reconnectTimer = null;
+    Events.on("beforeunload", (e) => this.disconnect());
+    Events.on("pagehide", (e) => this.disconnect());
+    document.addEventListener("visibilitychange", (e) =>
+      this.onVisibilityChange()
+    );
     this.initializeSocketAndStream();
   }
 
@@ -303,13 +315,15 @@ class Application {
   }
 
   connectToWebSocket() {
+    console.log('connect to socket');
+    if (this.socket && this.socket.connected === true) return;
+
     this.socket = io(webSocketConnection);
 
     this.socket.on("connect", () => {
-      // createRTCPeerConnection();
       console.log("connected ", this.socket);
       setLocalId(this.socket.id);
-      // peerConnection = new PeerConnection(configuration, localStream);
+      
     });
 
     this.socket.on("reconnect_attempt", () => {
@@ -327,25 +341,14 @@ class Application {
 
     this.socket.on("disconnect", (evt) => {
       log$1(" socket disconnected ", !this.socket.connected);
+      this.onDisconnected();
     });
 
-    this.socket.on("message", (evt) => {
-      log$1("socket message received ", evt);
-    });
-
-    this.socket.on("update-users-list", ({ users }) => {
-      log$1("update users ", users);
-      // updateUserList(users);
-    });
-
-    this.socket.on("remove-user", ({ socketId }) => {
-      log$1("remove user ", socketId);
-      // removeUser(socketId);
-    });
-
+    this.socket.on("message", this.onMessage);
+    
     // Handle messages recieved in socket
     this.socket.on("request", (event) => {
-      log$1("requst ", this);
+      log$1("requst ", event);
       let jsonData = event;
 
       switch (jsonData.type) {
@@ -362,8 +365,18 @@ class Application {
       }
     });
 
-    socket.connect(webSocketConnection);
-    return socket;
+    this.socket.connect(webSocketConnection);
+    return this.socket;
+  }
+
+  onMessage(message) {
+   
+   switch(message.type) {
+     case 'displayName':
+       console.log('display name ', message.name);
+       setLocalName(message.name);
+       break;
+   }
   }
 
   startCall(remoteClientId) {
@@ -433,38 +446,62 @@ class Application {
 
   toggleVideo() {
     this.displayVideo = !this.displayVideo;
-    this.peerConnection.toggleMediaStreamTrack('Video', this.displayVideo);
-    
+    this.peerConnection.toggleMediaStreamTrack("Video", this.displayVideo);
   }
-  
+
   toggleAudio() {
     this.displayAudio = !this.displayAudio;
-    this.peerConnection.toggleMediaStreamTrack('Audio', this.displayAudio);
+    this.peerConnection.toggleMediaStreamTrack("Audio", this.displayAudio);
+  }
+
+  cleanUp() {
+    console.log("clean up task ", this.peerConnection);
+    this.socket.close();
+    this.peerConnection.close();
+  }
+
+  onDisconnected() {
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(_ => this.connectToWebSocket(), 5000);
+  }
+
+  disconnect() {
+    console.log("disconnect ", this.socket, this.peerConnection);
+  }
+
+  isConnected() {
+    return this.socket && this.socket.connected;
+  }
+
+  onVisibilityChange() {
+    console.log("visibilty change ", document.hidden);
+    if (document.hidden) return;
+    // this.connectToWebSocket();
   }
 }
 
+class Events {
+  static fire(type, data) {
+    return window.dispatchEvent(new CustomEvent(type, { detail: data }));
+  }
+
+  static on(type, callback) {
+    console.log("listen to ", type);
+    return window.addEventListener(type, callback, false);
+  }
+}
+
+// Initialize application
 const app = new Application();
 
-callBtn.onclick = () => {
-  console.log('call ', remoteIdInput.value);
-  app.startCall(remoteIdInput.value.trim());
-};
-
-pickCall.onclick = () => {
-  app.acceptCall();
-  callModal$1.classList.remove(CALL_STATES$1.INCOMING);
-  callModal$1.classList.add(CALL_STATES$1.ACCEPTED);
-};
 
 /**
- * TODO:
- * 1. send decline signal over socket, to notifiy  caller of declined call state
+ * Todo:  
+ * 1. when peers connect open a modal to send files between peers
+ * 2. create file-transfer data-channel for transfers between peers when user chooses to send files
+ * 3. send files in binary/arraybuffer format
+ * 5. send files, texts or links between peers using a file transfer data-channel
+ * Implement a server connection that takes care of the socket/server implementations
+ * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
+ *
  */
-dropCall.onclick = () => {
-  app.declineCall();
-  callModal$1.classList.remove(CALL_STATES$1.INCOMING);
-  callModal$1.classList.remove(CALL_STATES$1.ACCEPTED);
-};
-
-toggleVideo.onclick = app.toggleVideo.bind(app);
-toggleAudio.onclick = app.toggleAudio.bind(app);

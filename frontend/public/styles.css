@@ -289,18 +289,18 @@ i.icon {
 }
 
 .end-call {
-  background-image: url(img/end-call.svg);
+  background-image: url(./img/end-call.svg);
   
 }
 
 .switch-camera {
-  background-image: url(img/switch-camera.svg);
+  background-image: url(./img/switch-camera.svg);
 }
 
 .video-off {
-  background-image: url(img/video-off.svg);
+  background-image: url(./img/video-off.svg);
 }
 
 .mic-off {
-  background-image: url(img/mic-off.svg);
+  background-image: url(./img/mic-off.svg);
 }

@@ -18,7 +18,7 @@
         <div class="logo-container">
           <img src="./img/doge.png" alt="doge logo" class="logo-img" />
           <h1 class="logo-text">
-            Chat<span class="logo-highlight">app</span>
+            vidchat<span class="logo-highlight">app</span>
           </h1>
         </div>
       </header>
@@ -29,7 +29,12 @@
             alt="video call logo"
             class="logo-vid"
           />
-          <p>Your ID is: <span id="localId"></span></p>
+          <p>
+            Your ID is: <strong><span id="localId"></span></strong>
+          </p>
+          <p>
+            Your Name is: <strong> <span id="peerName"></span></strong>
+          </p>
           <label for="remote-name">Enter username to connect</label>
           <input
             type="text"
@@ -70,7 +75,7 @@
           <button class="icon-button pick-call call-state show" id="pick-call">
             <i class="icon end-call"></i>
           </button>
-        </div>       
+        </div>
         <div class="call-controls">
           <button class="icon-button" id="switch-camera">
             <i class="icon switch-camera"></i>

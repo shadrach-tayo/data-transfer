@@ -28,7 +28,7 @@ const CALL_STATES = {
 };
 
 function getUserLocalMedia(cameraConfig) {
-  console.log('config ', cameraConfig)
+  console.log("config ", cameraConfig);
   return new Promise((resolve, reject) => {
     navigator.getWebCam =
       navigator.getUserMedia ||
@@ -47,136 +47,6 @@ function getUserLocalMedia(cameraConfig) {
   // function getMediaSuccess(stream) {}
 }
 
-// getUserLocalMedia()
-//   .then((stream) => {
-//     const localVideo = document.getElementById("local-video");
-//     localStream = stream;
-//     console.log("tracks ", localStream.getTracks());
-
-//     if (localVideo) {
-//       localVideo.srcObject = stream;
-//       try {
-//         connectToWebSocket();
-//       } catch (e) {
-//         console.log("Couldn\t connect to web sockets");
-//       }
-//     }
-//   })
-//   .catch((error) => {
-//     console.log("error: could not access webcam  ", error);
-//   });
-
-/*
-function connectToWebSocket() {
-  socket = io(webSocketConnection);
-
-  socket.on("connect", () => {
-    // createRTCPeerConnection();
-    console.log("connected ", socket);
-    setLocalId(socket.id);
-    // peerConnection = new PeerConnection(configuration, localStream);
-  });
-
-  socket.on("reconnect_attempt", () => {
-    // console.log("reconnect ");
-    socket.io.opts.transports = ["polling", "websocket"];
-  });
-
-  socket.on("error", (error) => {
-    log(" socket connection error ", error);
-  });
-
-  socket.on("close", (evt) => {
-    log("Web socket connection closed ", evt);
-  });
-
-  socket.on("disconnect", (evt) => {
-    log(" socket disconnected ", !socket.connected);
-  });
-
-  socket.on("message", (evt) => {
-    log("socket message received ", evt);
-  });
-
-  socket.on("update-users-list", ({ users }) => {
-    log("update users ", users);
-    // updateUserList(users);
-  });
-
-  socket.on("remove-user", ({ socketId }) => {
-    log("remove user ", socketId);
-    // removeUser(socketId);
-  });
-
-  // Handle messages recieved in socket
-  socket.on("request", function (event) {
-    jsonData = event;
-    log("requst ", event);
-
-    switch (jsonData.type) {
-      case "candidate":
-        peerConnection.addIceCandidate(jsonData);
-        break;
-      case "offer":
-        peerConnection.handleOffer(jsonData);
-        break;
-      case "answer":
-        peerConnection.handleAnswer(jsonData);
-        break;
-      default:
-        break;
-    }
-  });
-
-  socket.connect(webSocketConnection);
-  return socket;
-}
-*/
-
-/*
-function callUser(clientId) {
-  console.log("starting call........ ", clientId);
-  peerConnection.startRemoteConnection(clientId);
-}
-*/
-
-// function updateUserList(socketIds) {
-//   const activeUserContainer = document.getElementById("active-user-container");
-
-//   socketIds.forEach((socketId) => {
-//     const alreadyExistingUser = document.getElementById(socketId.id);
-//     if (!alreadyExistingUser) {
-//       const userContainerEl = createUserItemContainer(socketId.id);
-//       activeUserContainer.appendChild(userContainerEl);
-//     }
-//   });
-// }
-
-/*
-function createUserItemContainer(socketId) {
-  const userContainerEl = document.createElement("div");
-
-  const usernameEl = document.createElement("p");
-
-  userContainerEl.setAttribute("class", "active-user");
-  userContainerEl.setAttribute("id", socketId);
-  usernameEl.setAttribute("class", "username");
-  usernameEl.innerHTML = `Socket: ${socketId}`;
-
-  userContainerEl.appendChild(usernameEl);
-
-  userContainerEl.addEventListener("click", () => {
-    // unselectUsersFromList();
-
-    userContainerEl.setAttribute("class", "active-user active-user--selected");
-    const talkingWithInfo = document.getElementById("talking-with-info");
-    talkingWithInfo.innerHTML = `Talking with: "Socket: ${socketId}"`;
-    // callUser(socketId);
-  });
-
-  return userContainerEl;
-} */
-
 function removeUser(userId) {
   // const activeUserContainer = document.getElementById("active-user-container");
   const userEl = document.getElementById(userId);
@@ -185,6 +55,10 @@ function removeUser(userId) {
 
 function setLocalId(id) {
   document.getElementById("localId").textContent = id;
+}
+
+function setLocalName(name) {
+  document.getElementById("peerName").textContent = name;
 }
 
 const localVideo = document.getElementById("local-video");
@@ -210,6 +84,12 @@ class Application {
       video: true,
       audio: true,
     };
+    this.reconnectTimer = null;
+    Events.on("beforeunload", (e) => this.disconnect());
+    Events.on("pagehide", (e) => this.disconnect());
+    document.addEventListener("visibilitychange", (e) =>
+      this.onVisibilityChange()
+    );
     this.initializeSocketAndStream();
   }
 
@@ -237,13 +117,15 @@ class Application {
   }
 
   connectToWebSocket() {
+    console.log('connect to socket')
+    if (this.socket && this.socket.connected === true) return;
+
     this.socket = io(webSocketConnection);
 
     this.socket.on("connect", () => {
-      // createRTCPeerConnection();
       console.log("connected ", this.socket);
       setLocalId(this.socket.id);
-      // peerConnection = new PeerConnection(configuration, localStream);
+      
     });
 
     this.socket.on("reconnect_attempt", () => {
@@ -261,25 +143,14 @@ class Application {
 
     this.socket.on("disconnect", (evt) => {
       log(" socket disconnected ", !this.socket.connected);
+      this.onDisconnected();
     });
 
-    this.socket.on("message", (evt) => {
-      log("socket message received ", evt);
-    });
-
-    this.socket.on("update-users-list", ({ users }) => {
-      log("update users ", users);
-      // updateUserList(users);
-    });
-
-    this.socket.on("remove-user", ({ socketId }) => {
-      log("remove user ", socketId);
-      // removeUser(socketId);
-    });
-
+    this.socket.on("message", this.onMessage);
+    
     // Handle messages recieved in socket
     this.socket.on("request", (event) => {
-      log("requst ", this);
+      log("requst ", event);
       let jsonData = event;
 
       switch (jsonData.type) {
@@ -298,8 +169,18 @@ class Application {
       }
     });
 
-    socket.connect(webSocketConnection);
-    return socket;
+    this.socket.connect(webSocketConnection);
+    return this.socket;
+  }
+
+  onMessage(message) {
+   
+   switch(message.type) {
+     case 'displayName':
+       console.log('display name ', message.name)
+       setLocalName(message.name);
+       break;
+   }
   }
 
   startCall(remoteClientId) {
@@ -368,39 +249,63 @@ class Application {
   }
 
   toggleVideo() {
-    this.displayVideo = !this.displayVideo
-    this.peerConnection.toggleMediaStreamTrack('Video', this.displayVideo)
-    
+    this.displayVideo = !this.displayVideo;
+    this.peerConnection.toggleMediaStreamTrack("Video", this.displayVideo);
   }
-  
+
   toggleAudio() {
-    this.displayAudio = !this.displayAudio
-    this.peerConnection.toggleMediaStreamTrack('Audio', this.displayAudio)
+    this.displayAudio = !this.displayAudio;
+    this.peerConnection.toggleMediaStreamTrack("Audio", this.displayAudio);
+  }
+
+  cleanUp() {
+    console.log("clean up task ", this.peerConnection);
+    this.socket.close();
+    this.peerConnection.close();
+  }
+
+  onDisconnected() {
+    clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = setTimeout(_ => this.connectToWebSocket(), 5000)
+  }
+
+  disconnect() {
+    console.log("disconnect ", this.socket, this.peerConnection);
+  }
+
+  isConnected() {
+    return this.socket && this.socket.connected;
+  }
+
+  onVisibilityChange() {
+    console.log("visibilty change ", document.hidden);
+    if (document.hidden) return;
+    // this.connectToWebSocket();
   }
 }
 
+class Events {
+  static fire(type, data) {
+    return window.dispatchEvent(new CustomEvent(type, { detail: data }));
+  }
+
+  static on(type, callback) {
+    console.log("listen to ", type);
+    return window.addEventListener(type, callback, false);
+  }
+}
+
+// Initialize application
 const app = new Application();
 
-callBtn.onclick = () => {
-  console.log('call ', remoteIdInput.value);
-  app.startCall(remoteIdInput.value.trim());
-}
-
-pickCall.onclick = () => {
-  app.acceptCall();
-  callModal.classList.remove(CALL_STATES.INCOMING)
-  callModal.classList.add(CALL_STATES.ACCEPTED)
-}
 
 /**
- * TODO:
- * 1. send decline signal over socket, to notifiy  caller of declined call state
+ * Todo:  
+ * 1. when peers connect open a modal to send files between peers
+ * 2. create file-transfer data-channel for transfers between peers when user chooses to send files
+ * 3. send files in binary/arraybuffer format
+ * 5. send files, texts or links between peers using a file transfer data-channel
+ * Implement a server connection that takes care of the socket/server implementations
+ * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
+ *
  */
-dropCall.onclick = () => {
-  app.declineCall();
-  callModal.classList.remove(CALL_STATES.INCOMING);
-  callModal.classList.remove(CALL_STATES.ACCEPTED);
-}
-
-toggleVideo.onclick = app.toggleVideo.bind(app)
-toggleAudio.onclick = app.toggleAudio.bind(app)
