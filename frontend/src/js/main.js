@@ -1,25 +1,9 @@
-import PeerConnection from "./peerConnection";
+import { PeerConnection } from "./peerConnection";
 
-const turnServerIPAddress = "3.81.63.29";
-const turnServerPort = "3478";
-const turnServerUserName = "shadrachtayo";
-const turnServerPassword = "shadrach19";
 
-const configuration = {
-  iceServers: [
-    {
-      urls: [`stun:${turnServerIPAddress}:${turnServerPort}?transport=tcp`],
-    },
-    {
-      urls: [`turn:${turnServerIPAddress}:${turnServerPort}?transport=tcp`],
-      username: turnServerUserName,
-      credential: turnServerPassword,
-    },
-  ],
-};
 
 const log = console.log;
-const webSocketConnection = "SOCKET_URL";
+const webSocketConnectionURL = "SOCKET_URL";
 
 const CALL_STATES = {
   ACCEPTED: "accepted",
@@ -47,89 +31,76 @@ function getUserLocalMedia(cameraConfig) {
   // function getMediaSuccess(stream) {}
 }
 
-function removeUser(userId) {
-  // const activeUserContainer = document.getElementById("active-user-container");
-  const userEl = document.getElementById(userId);
-  userEl.parentNode.removeChild(userEl);
-}
-
 function setLocalId(id) {
-  document.getElementById("localId").textContent = id;
+  // document.getElementById("localId").textContent = id;
 }
 
 function setLocalName(name) {
   document.getElementById("peerName").textContent = name;
 }
 
-const localVideo = document.getElementById("local-video");
-const remoteVideo = document.getElementById("remote-video");
-const miniVideo = document.getElementById("mini-video");
-const callBtn = document.getElementById("call-btn");
-const callModal = document.getElementById("call-modal");
-const remoteIdInput = document.getElementById("remote-id");
-
-// call controll buttons
-const pickCall = document.getElementById("pick-call");
-const dropCall = document.getElementById("drop-call");
-const switchCamera = document.getElementById("switch-camera");
-const toggleVideo = document.getElementById("toggle-video");
-const toggleAudio = document.getElementById("toggle-audio");
-
-class Application {
+class Server {
   constructor() {
-    console.log("app");
     this.displayVideo = true;
     this.displayAudio = true;
     this.cameraConfig = {
       video: true,
       audio: true,
     };
+
     this.reconnectTimer = null;
+
     Events.on("beforeunload", (e) => this.disconnect());
     Events.on("pagehide", (e) => this.disconnect());
     document.addEventListener("visibilitychange", (e) =>
       this.onVisibilityChange()
     );
+
     this.initializeSocketAndStream();
   }
 
   initializeSocketAndStream() {
-    console.log("camera ", this.cameraConfig);
-    getUserLocalMedia(this.cameraConfig)
-      .then((stream) => {
-        let localVideo = document.getElementById("local-video");
-        this.localStream = stream;
-        console.log("track", this.localStream.getTracks());
+    try {
+      this.connectToWebSocket();      
+    } catch (e) {
+      console.log("Couldn\t connect to web sockets");
+    }
 
-        if (localVideo) {
-          // localVideo.srcObject = stream;
-          try {
-            this.connectToWebSocket();
-            console.log("app socket ", this.socket);
-          } catch (e) {
-            console.log("Couldn\t connect to web sockets");
-          }
-        }
-      })
-      .catch((error) => {
-        console.log("error: could not access webcam  ", error);
-      });
+    // getUserLocalMedia(this.cameraConfig)
+    //   .then((stream) => {
+    //     let localVideo = document.getElementById("local-video");
+    //     this.localStream = stream;
+
+    //     if (localVideo) {
+    //       // localVideo.srcObject = stream;
+    //       try {
+    //         this.connectToWebSocket();
+    //         console.log("app socket ", this.socket);
+    //       } catch (e) {
+    //         console.log("Couldn\t connect to web sockets");
+    //       }
+    //     }
+    //   })
+    //   .catch((error) => {
+    //     console.log("error: could not access webcam  ", error);
+    //   });
   }
 
   connectToWebSocket() {
-    console.log('connect to socket')
+    
     if (this.socket && this.socket.connected === true) return;
 
-    this.socket = io(webSocketConnection);
+    this.socket = io(webSocketConnectionURL);
 
     this.socket.on("connect", () => {
-      console.log("connected ", this.socket);
+      console.log("connected... ", this.socket.id);
       setLocalId(this.socket.id);
-      
     });
 
     this.socket.on("reconnect_attempt", () => {
-      // console.log("reconnect ");
+      console.log(
+        "........................reconnect_attempt........................ "
+      );
       this.socket.io.opts.transports = ["polling", "websocket"];
     });
 
@@ -137,140 +108,67 @@ class Application {
       log(" socket connection error ", error);
     });
 
-    this.socket.on("close", (evt) => {
-      log("Web socket connection closed ", evt);
-    });
+    this.socket.on("close", this.onDisconnect);
 
     this.socket.on("disconnect", (evt) => {
       log(" socket disconnected ", !this.socket.connected);
-      this.onDisconnected();
+      this.onDisconnect();
     });
 
     this.socket.on("message", this.onMessage);
-    
-    // Handle messages recieved in socket
-    this.socket.on("request", (event) => {
-      log("requst ", event);
-      let jsonData = event;
 
-      switch (jsonData.type) {
-        case "candidate":
-          this.peerConnection.addIceCandidate(jsonData);
-          break;
-        case "offer":
-          this.handleIncomingCall(jsonData);
-          // this.peerConnection.handleOffer(jsonData);
-          break;
-        case "answer":
-          this.peerConnection.handleAnswer(jsonData);
-          break;
-        default:
-          break;
-      }
-    });
+    this.socket.connect(webSocketConnectionURL);
 
-    this.socket.connect(webSocketConnection);
     return this.socket;
   }
 
   onMessage(message) {
-   
-   switch(message.type) {
-     case 'displayName':
-       console.log('display name ', message.name)
-       setLocalName(message.name);
-       break;
-   }
-  }
-
-  startCall(remoteClientId) {
-    this.remoteClientId = remoteClientId;
-    if (this.peerConnection) {
-      this.peerConnection.close();
-    }
-
-    this.peerConnection = new PeerConnection(
-      configuration,
-      this.localStream,
-      this.socket
-    );
-    this.peerConnection.startRemoteConnection(this.remoteClientId);
-    miniVideo.srcObject = this.localStream;
-
-    callModal.classList.add("show");
-    callModal.classList.add(CALL_STATES.OUTGOING);
-  }
-
-  handleIncomingCall(data) {
-    this.offerData = data;
-    this.remoteClientId = data.from;
-
-    if (this.peerConnection) {
-      this.peerConnection.close();
-    }
-
-    this.peerConnection = new PeerConnection(
-      configuration,
-      this.localStream,
-      this.socket
-    );
-    this.peerConnection.handleOffer(this.offerData);
-
-    callModal.classList.add("show");
-    callModal.classList.add(CALL_STATES.INCOMING);
-    // this.peerConnection.startRemoteConnection(this.remoteClientId)
-  }
-
-  acceptCall() {
-    this.peerConnection.createAnswer(this.remoteClientId);
-    miniVideo.srcObject = this.localStream;
-  }
-
-  declineCall() {
-    this.peerConnection.close();
-
-    miniVideo.srcObject = null;
-    localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
-
-    callModal.classList.remove("show");
-
-    callModal.classList.remove(CALL_STATES.INCOMING);
-    callModal.classList.remove(CALL_STATES.ACCEPTED);
-    callModal.classList.remove(CALL_STATES.OUTGOING);
-  }
-
-  toggleMediaStreamTrack(type, on = false) {
-    if (this.localStream) {
-      this.localStream[`get${type}Tracks`]().forEach((track) => {
-        track.enabled = on;
-      });
+    // log("incomming server message ", message.type);
+    switch (message.type) {
+      case "displayName":
+        // log("display name ", message.name);
+        setLocalName(message.name);
+        break;
+      case "buddies":
+        log("buddies ", message.buddies);
+        Events.fire('peers', message)
+        break;
+      case "peer-left":
+        log("peer-left ", message);
+        break;
+      case "signal":
+        // log("Signal", message.type);
+        Events.fire('signal', message);
+        break;
+      case "offer":
+        // add logic for offer
+        log("peer-offer ", message);
+        break;
+      case "answer":
+        // add logic to handle answer
+        log("peer answer ", message);
+        break;
+      default:
+        break;
     }
   }
 
-  toggleVideo() {
-    this.displayVideo = !this.displayVideo;
-    this.peerConnection.toggleMediaStreamTrack("Video", this.displayVideo);
-  }
-
-  toggleAudio() {
-    this.displayAudio = !this.displayAudio;
-    this.peerConnection.toggleMediaStreamTrack("Audio", this.displayAudio);
+  send(message) {
+    // console.log('send to server', message)
+    this.socket.send(message)
   }
 
   cleanUp() {
-    console.log("clean up task ", this.peerConnection);
+    log("clean up task ", this.peerConnection);
     this.socket.close();
-    this.peerConnection.close();
   }
 
-  onDisconnected() {
-    clearTimeout(this.reconnectTimer)
-    this.reconnectTimer = setTimeout(_ => this.connectToWebSocket(), 5000)
+  onDisconnect() {
+    log(" socket disconnected ", !this.socket.connected);
   }
 
   disconnect() {
-    console.log("disconnect ", this.socket, this.peerConnection);
+    log("disconnect ", this.socket, this.peerConnection);
   }
 
   isConnected() {
@@ -278,9 +176,8 @@ class Application {
   }
 
   onVisibilityChange() {
-    console.log("visibilty change ", document.hidden);
+    // console.log("visibilty change ", document.hidden);
     if (document.hidden) return;
-    // this.connectToWebSocket();
   }
 }
 
@@ -290,22 +187,79 @@ class Events {
   }
 
   static on(type, callback) {
-    console.log("listen to ", type);
+    // console.log("listen to ", type);
     return window.addEventListener(type, callback, false);
+  }
+}
+
+class PeersManager {
+  constructor(serverConnection) {
+    this.peers = {};
+    this.server = serverConnection;
+    Events.on("signal", (evt) => this._onSignal(evt.detail));
+    Events.on("peers", (evt) => this._onPeers(evt.detail));
+    Events.on("file-selected", (evt) => this._onFileSelected(evt.detail));
+    Events.on("peer-left", (evt) => this._onPeerLeft(evt.detail));
+    Events.on("send-text", (evt) => this._onSendText(evt.detail));
+  }
+
+  _onPeers(data) {
+    let peers = data.buddies;
+    peers.forEach((peer) => {
+      if (this.peers[peer.id]) {
+        // handle existing peers
+        return;
+      } else {
+        this.peers[peer.id] = new PeerConnection(peer.id, this.server);
+        // handle browsers that don't support RTCPeer
+      }
+    });
+  }
+
+  _onSignal(message) {
+    // console.log('capture signal ', message);
+    if(!message.sender) return;
+    
+    if (!this.peers[message.sender]) return;
+    this.peers[message.sender].onServerMessage(message);
+  }
+
+  _onFileSelected(message) {
+    console.log("file-selected ", evt);
+    this.peers[message.to].sendFile(message.files);
+  }
+
+  _onPeerLeft(message) {
+    console.log("peer-left ", message);
+    if (!this.peers[message.peerId]) return;
+    const peer = this.peers[message.peerId];
+    peer.close();
+    delete this.peers[message.peerId];
+  }
+
+  _onSendText(message) {
+    // console.log("send text ", message);
+    this.peers[message.to].sendText(message.text);
+  }
+}
+
+class Application {
+  constructor() {
+    this.server = new Server();
+    this.peersManager = new PeersManager(this.server);
+    console.log("app initialized");
   }
 }
 
 // Initialize application
 const app = new Application();
 
-
 /**
- * Todo:  
- * 1. when peers connect open a modal to send files between peers
- * 2. create file-transfer data-channel for transfers between peers when user chooses to send files
- * 3. send files in binary/arraybuffer format
- * 5. send files, texts or links between peers using a file transfer data-channel
- * Implement a server connection that takes care of the socket/server implementations
+ * Todo:
+ * 1.
+ * 2. 
+ * 3. create a PeerUI class to handle UI interactions for individual peers
+ * 
  * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
  *
  */

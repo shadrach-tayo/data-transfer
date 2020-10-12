@@ -14,11 +14,24 @@ const { uniqueNamesGenerator, animals, colors } = require('unique-names-generato
 },
 */
 
+
+function hash(text) {
+    // A string hashing function based on Daniel J. Bernstein's popular 'times 33' hash algorithm.
+    var h = 5381,
+        index = text.length;
+    while (index) {
+        h = (h * 33) ^ text.charCodeAt(--index);
+    }
+    return h >>> 0;
+}
+
 class Peer {
-    public socket;
-    public id;
-    public name;
+    socket: any;
+    id: string;
+    name: any;
+    hashedIp: number;
     private ip;
+
 
     constructor(socket) {
         this.socket = socket;
@@ -34,6 +47,7 @@ class Peer {
         };
     }
 
+
     private setIp(request: Http2ServerRequest) {
 
         if (request.headers['x-forwarded-for']) {
@@ -45,6 +59,8 @@ class Peer {
         if (this.ip == '::1' || this.ip == '::ffff:127.0.0.1') {
             this.ip = '127.0.0.1';
         }
+
+        this.hashedIp = hash(this.ip);
     }
 
     private setName() {
@@ -52,6 +68,7 @@ class Peer {
         const ua = parser(this.socket.request.headers['user-agent'])
 
         this.name = {
+            id: this.id,
             model: ua.device.model,
             os: ua.os.name,
             browser: ua.browser.name,
@@ -88,8 +105,7 @@ export class Server {
     private httpServer: HTTPServer;
     private app: Application;
     private io: SocketIOServer;
-    private activeSockets: Array<any> = []
-    private users: any = {}
+    private rooms: any = {}
     private peers: any = {}
 
     private readonly DEFAULT_PORT = process.env.PORT || 8000;
@@ -104,56 +120,125 @@ export class Server {
             key: fs.readFileSync(path.join(process.cwd(), '/server.key'), 'utf-8'),
             cert: fs.readFileSync(path.join(process.cwd(), '/server.crt'), 'utf-8')
         }, this.app);
-        this.io = socketIO(this.httpServer);
-        this.io.on('connection', (socket: any) => this.handleSocketConnection(new Peer(socket)))
         this.configureApp()
         this.handleRoutes()
 
+        this.io = socketIO(this.httpServer);
+        this.io.on('connection', (socket: any) => this.handleSocketConnection(new Peer(socket)))
     }
 
     private configureApp(): void {
         this.app.use(express.static(path.join(__dirname, '../frontend/public')))
+        setInterval(() => this.notifyDevices(), 3000)
     }
 
     private handleRoutes(): void {
         this.app.get("/", (req, res) => {
             res.send(`<h1>Hello World</h1>`);
-        })        
+        })
+    }
+
+    notifyDevices() {
+        const locations = {};
+
+        for (const id in this.peers) {
+            let peer = this.peers[id];
+            locations[peer.hashedIp] = locations[peer.hashedIp] || [];
+            locations[peer.hashedIp].push({ socket: peer.socket, name: peer.name })
+        }
+        // console.log('notifiy buddies ', locations)
+
+        Object.keys(locations).forEach(ip => {
+            let location = locations[ip]
+
+            location.forEach(peer => {
+                let buddies = location.reduce((result, otherPeer) => {
+                    if (otherPeer.name.id != peer.name.id) {
+                        result.push(otherPeer.name)
+                    }
+                    return result;
+                }, [])
+
+                let socket = peer.socket;
+                let msg = { buddies, type: 'buddies' }
+                let currState = hash(JSON.stringify(buddies))
+                if (currState != socket.laststate) {
+                    socket.send(msg);
+                    socket.laststate = currState;
+                }
+            })
+        })
     }
 
     private handleSocketConnection(peer: Peer): void {
+        // console.log('connect ', peer.id)
 
-        const existingSocket = this.activeSockets.find((existingSocket: any) => existingSocket.id === peer.id)
+        this.joinRoom(peer);
 
-            if (!existingSocket) {
-                this.peers[peer.id] = peer;
-                this.activeSockets.push({ id: peer.id, });
+        peer.socket.send({ name: peer.name.displayName, type: 'displayName' })
 
-                peer.socket.send({ name: peer.name.displayName, type: 'displayName' })
+        peer.socket.on('disconnect', () => this.leaveRoom(peer))
 
-                peer.socket.on('disconnect', () => {
-                    this.activeSockets = this.activeSockets.filter(existingSocket => existingSocket.id !== peer.id);
+        peer.socket.on('message', (message) => this.onMessage(peer, message))        
 
-                    peer.socket.broadcast.emit('remove-user', { socketId: peer.id })
-                })
+    }
 
-                peer.socket.broadcast.emit('update-users-list', { users: [{ id: peer.id }] })
+    private onMessage(sender, message) {
+        if (!sender) return;
 
-                peer.socket.emit('update-users-list', {
-                    users: this.activeSockets.filter(existingSocket => existingSocket.id !== peer.id)
-                })
+        switch (message.type) {
+            case 'disconnect':
+                this.leaveRoom(sender);
+                break;
+        }
 
-                peer.socket.on('request', data => {
+        if (message.to && sender.ip) {
+            let recipientId = message.to;
+            let recipient = this.rooms[sender.ip][recipientId];
 
-                    if (data.id) {
-                        const receiver = this.peers[data.id];
-                        // console.log('receiver ', receiver)
-                        if (receiver)
-                            receiver.emit('request', { ...data, from: peer.id, })
-                    }
-                })
-
+            delete message.to;
+            message.sender = sender.id;
+            if (recipient) {
+                // console.log('send message ', message.sender)
+                this.send(recipient, message)
             }
+        }
+    }
+
+    send(peer, message) {
+        if (!peer) return;
+        // check if io is connected or abort
+        peer.socket.send(message)
+    }
+
+    private joinRoom(peer) {
+        if (!this.peers[peer.id]) {
+            this.peers[peer.id] = peer;
+        }
+
+        if (!this.rooms[peer.ip]) {
+            this.rooms[peer.ip] = {};
+        }
+
+        this.rooms[peer.ip][peer.id] = peer;
+    }
+
+    private leaveRoom(peer) {
+        if (!this.rooms[peer.ip] || !this.rooms[peer.ip][peer.id]) return;
+
+        delete this.rooms[peer.ip][peer.id];
+        peer.socket.disconnect();
+        delete this.peers[peer.id];
+
+        if (!Object.keys(this.rooms[peer.ip]).length) {
+            delete this.rooms[peer.ip]
+            delete this.peers[peer.id];
+        } else {
+            for (const id in this.rooms[peer.ip]) {
+                let otherPeer = this.rooms[peer.ip][id];
+                this.send(otherPeer, { type: 'peer-left', peerId: peer.id })
+            }
+        }
     }
 
     public listen(callback: (port: any) => void): void {

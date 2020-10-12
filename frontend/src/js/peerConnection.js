@@ -1,101 +1,153 @@
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log = console.log;
 
+const turnServerIPAddress = "3.81.63.29";
+const turnServerPort = "3478";
+const turnServerUserName = "shadrachtayo";
+const turnServerPassword = "shadrach19";
 
-const localVideo = document.getElementById("local-video");
-const remoteVideo = document.getElementById("remote-video");
-const miniVideo = document.getElementById("mini-video");
-const callModal = document.getElementById("call-modal");
-
-
-const CALL_STATES = {
-  ACCEPTED: "accepted",
-  INCOMING: "incoming",
-  OUTGOING: "outgoing",
+const RTC_Config = {
+  iceServers: [
+    {
+      urls: [`stun:${turnServerIPAddress}:${turnServerPort}?transport=tcp`],
+    },
+    {
+      urls: [`turn:${turnServerIPAddress}:${turnServerPort}?transport=tcp`],
+      username: turnServerUserName,
+      credential: turnServerPassword,
+    },
+  ],
 };
 
+
 class PeerConnection {
-  constructor(config, stream, socket) {
-    this.socket = socket;
-    this.stream = stream;
-    this.config = config;
+  constructor(peerId, server) {
+    this.peerId = peerId;
+    this.server = server;
+    // this.stream = stream;
+    this.config = RTC_Config;
     this.existingTracks = [];
-    this.createPeerConnection();
+    console.log("new peer ", peerId);
+    this._connect(this.peerId, true);
   }
 
-  createPeerConnection() {
+  _connect(peerId, isCaller) {
+    this.peerId = peerId;
     this.peerConnection = new RTCPeerConnection(this.config);
-    this.addLocalStream();
-    this.listenToPeerEvents();
+    this.peerConnection.onicecandidate = e => this.onIceCandidate(e);
+    this.peerConnection.onconnectionstatechange = e => this.onConnectionStateChange();
+    this.peerConnection.oniceconnectionstatechange = e => this.onIceConnectionStateChange();
+
+    // this.listenToPeerEvents();
+    if (isCaller) {
+      this._openChannel();
+    } else {
+      this.peerConnection.ondatachannel = (e) => this._channelOpened(e);
+    }
   }
 
-  startRemoteConnection(clientId) {
-    if (this.channel) channel.close();
+  _openChannel() {
+    const channel = this.peerConnection.createDataChannel("data-channel", {
+      reliable: true,
+    });
+    channel.binaryType = "arraybuffer";
+    channel.onopen = (e) => this._channelOpened(e);
+    this.peerConnection
+      .createOffer()
+      .then((offer) => this._onDescription(offer))
+      .catch((err) => log("error ", err));
+  }
 
-    this.channel = this.peerConnection.createDataChannel("chat-channel");
+  _channelOpened(e) {
+    // handle channel opened
+    this.channel = e.channel || e.target;
+    this.channel.onmessage = this._onMessage;
+    this.channel.onerror = this._onChannelClosed;
+  }
 
-    this.remoteClientId = clientId;
-    this.createOffer(clientId);
+  onConnectionStateChange(evt) {
+    log("Connection state changed ", this.peerId, this.peerConnection.connectionState);
+    
+    switch (this.peerConnection.connectionState) {
+      case "disconnected":
+        this._onChannelClosed();
+        break;
+      case "failed":
+        this.peerConnection = null;
+        this._onChannelClosed();
+        break;
+    }
+  }
+
+  _onDescription(desc) {
+    // console.log('new des ', desc)
+    this.peerConnection
+      .setLocalDescription(new RTCSessionDescription(desc))
+      .then(_ => {
+        // console.log('description ', desc)
+        this.sendSignal({ sdp: desc });
+      })
+      .catch((e) => this.onError(e));
+  }
+
+  onIceConnectionStateChange(evt) {
+    console.log("ice connection state changed");
+  }
+
+  onIceCandidate(evt) {
+    if (!evt.candidate) return;
+    // console.log('ice ', evt);
+    this.sendSignal({ ice: evt.candidate });
+  }
+
+  sendSignal(message) {
+    message.to = this.peerId;
+    message.type = "signal";
+    this.server.send(message);
+  }
+
+  _onMessage(evt) {
+    log("Received data  ", evt.data);
+  }
+
+  onServerMessage(data) {
+    // log("server message ", data.type);
+    if (!this.peerConnection) this.refresh();
+
+    if (data.sdp) {
+      this.peerConnection
+        .setRemoteDescription(new RTCSessionDescription(data.sdp))
+        .then((_) => {
+          if (data.sdp.type === "offer") {
+            this.peerConnection
+              .createAnswer()
+              .then((answer) => this._onDescription(answer));
+          }
+        })
+        .catch((err) => this.onError(err));
+    } else if (data.ice) {
+      this.peerConnection.addIceCandidate(new RTCIceCandidate(data.ice));
+    }
+  }
+
+  _onChannelClosed(e) {
+    if (!this.isCaller) return;
+    this._connect(); // reconnect channel
+  }
+
+  onError(err) {
+    log("error ", err);
+  }
+
+  refresh() {
+    if (this.channel || this.channel.readystate === "open") return;
+    if (this.channel || this.channel.readystate === "connection") return;
+    this.connect();
   }
 
   listenToPeerEvents() {
-    this.peerConnection.ontrack = (evt) => {
-      console.log("Received streams ", evt.streams);
-      document.getElementById("remote-video").srcObject = event.streams[0];
-    };
-
-    this.peerConnection.ondatachannel = (evt) => {
-      log("Received data channel ", evt.channel);
-    };
-
-    this.peerConnection.onicecandidate = (evt) => {
-      log("ICE Candidate created ", evt.candidate);
-      if (evt.candidate) {
-        log("Sending ICE Candidate - ", evt.candidate.candidate);
-        this.socket.emit("request", {
-          id: this.remoteClientId,
-          candidate: evt.candidate,
-          type: "candidate",
-        });
-      }
-    };
-
     this.peerConnection.onicegatheringstatechange = (evt) => {
       log("ICE Candidate gathering state ", evt);
-    };
-
-    this.peerConnection.onicecandidateerror = (err) => {
-      log("ICE candidate error ", err);
-    };
-
-    this.peerConnection.onconnectionstatechange = (evt) => {
-      log("Connection state changed ", this.peerConnection);
-      if (this.peerConnection.connectionState === "connected") {
-        this.stream.getTracks().forEach((track, index) => {
-          console.log(
-            "tracks ",
-            track,
-            "senders ",
-            this.peerConnection.getSenders()
-          );
-        });
-      } else if (
-        this.peerConnection.connectionState === "disconnected" ||
-        this.peerConnection.connectionState === "failed"
-      ) {
-        miniVideo.srcObject = null;
-        localVideo.srcObject = null;
-        remoteVideo.srcObject = null;
-
-        callModal.classList.remove("show");
-
-        callModal.classList.remove(CALL_STATES.INCOMING);
-        callModal.classList.remove(CALL_STATES.ACCEPTED);
-        callModal.classList.remove(CALL_STATES.OUTGOING);
-
-        this.peerConnection.close();
-        log("disconnected ");
-      }
     };
 
     this.peerConnection.onsignalingstatechange = (evt) => {
@@ -103,26 +155,13 @@ class PeerConnection {
     };
   }
 
-  addLocalStream(stream) {
-    for (const track of this.stream.getTracks()) {
-      this.existingTracks.push(
-        this.peerConnection.addTrack(track, this.stream)
-      );
-    }
-  }
-
-  createAnswer(clientId = this.remoteClientId) {
-    if (clientId != this.remoteClientId) return;
+  createAnswer(evt) {
     this.peerConnection
       .createAnswer()
       .then((answer) => {
         log("sending answer ", answer);
-
-        this.socket.emit("request", {
-          id: clientId,
-          answer: answer,
-          type: "answer",
-        });
+        // send answer to remote peer
+        this.sendSignal(answer);
 
         // set offer description
         this.peerConnection.setLocalDescription(answer);
@@ -131,65 +170,9 @@ class PeerConnection {
   }
 
   handleAnswer(data) {
-    console.log("handle answer ", data);
-    this.remoteClientId = data.from;
     this.peerConnection.setRemoteDescription(
       new RTCSessionDescription(data.answer)
     );
-  }
-
-  createOffer(clientId) {
-    this.peerConnection
-      .createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 })
-      .then((offer) => {
-        log("offer ", offer);
-
-        this.remoteClientId = clientId; // set remote clientId to receiver's id
-
-        this.socket.emit("request", {
-          id: clientId,
-          offer: offer,
-          type: "offer",
-        });
-
-        // set offer description
-        this.peerConnection.setLocalDescription(offer);
-      })
-      .catch((err) => log("error creating offer ", err));
-  }
-
-  handleOffer(data) {
-    console.log("handle offer ", data);
-    this.remoteClientId = data.from;
-    this.peerConnection.setRemoteDescription(
-      new RTCSessionDescription(data.offer)
-    );
-  }
-
-  resetTracks() {
-    let peer = this;
-    this.stream.getTracks().forEach(function (track, index) {
-      peer.peerConnection.addTrack(track, peer.stream);
-      peer.peerConnection.getSenders().find(function (s) {
-        if (s.track.kind == track.kind) {
-          s.replaceTrack(track);
-        }
-      });
-    });
-  }
-
-  toggleMediaStreamTrack(type, on = false) {
-    if (this.stream) {
-      this.stream[`get${type}Tracks`]().forEach((track) => {
-        track.enabled = on;
-        console.log('type ', track, on)
-      });
-    }
-  }
-
-  updateStream(stream) {
-    this.stream = stream;
-    this.resetTracks();
   }
 
   addIceCandidate(data) {
@@ -202,4 +185,4 @@ class PeerConnection {
   }
 }
 
-export default PeerConnection;
+export { PeerConnection };
