@@ -51,21 +51,62 @@ body {
   
   overflow: hidden;
 }
-.buddies {
-  background-color: cadetblue;
+.peers {
+  background-color: rgb(195, 204, 204);
   height: 90%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.buddy {
-  width: 60px;
-  height: 60px;
-  background-color: palevioletred;
+
+.peer {
+  width: 120px;
+  height: 120px; 
+}
+
+.peer label input[type=file] {
+  visibility: hidden;
+  width: 0;
+}
+
+
+.column {
+  display: flex;
+  flex-direction: column;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.peer .icon-container {
+  /* width: 40px; */
+  /* height: 40px; */
+  padding: 12px;
+  background-color: rgb(75, 28, 136);
   border: none;
   border-radius: 50%;
   box-shadow: 0 1px 10px 2px rgba(0, 0, 0, 0.2);
+  display: flex;
+  color: #ffffff;
+  cursor: pointer;
 }
+
+
+.peer .icon {
+  /* font-size: 24px; */
+  fill: currentColor;
+  width: 40px;
+  height: 40px;
+}
+
+.peer-name {
+  text-align: center;
+  margin-top: 10px;
+}
+
 .details {
   text-align: center;
   padding: 0 20px;

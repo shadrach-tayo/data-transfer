@@ -1,3 +1,4 @@
+import { FileDigester, Events } from "./utils";
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log = console.log;
 
@@ -19,31 +20,153 @@ const RTC_Config = {
   ],
 };
 
-
-class PeerConnection {
+class RTCPeer {
   constructor(peerId, server) {
     this.peerId = peerId;
     this.server = server;
+    this._fileQueue = [];
+    this._busy = false;
+  }
+
+  sendFiles(files) {
+    log("files ", files.length);
+    for (let i = 0; i < files.length; i++) {
+      this._fileQueue.push(files[i]);
+    }
+    if (this._busy) return;
+    this._deQueueFile();
+  }
+
+  _deQueueFile() {
+    log("dequeue file -----------------", this._fileQueue.length);
+    if (!this._fileQueue.length) return;
+    this._busy = true;
+    let file = this._fileQueue.shift();
+    this.sendFile(file);
+  }
+
+  _sendJson(data) {
+    this._send(JSON.stringify(data));
+  }
+
+  sendText(text) {
+    this._sendJson({type: 'text', text})
+  }
+
+  sendFile(file) {
+    // send file header
+    const header = {
+      type: "file-header",
+      name: file.name,
+      size: file.size,
+      mime: file.type,
+    };
+    this._sendJson(header);
+    // create fileDigester to handle new files
+    // send message to indicate success full tranfer
+    // track progress
+    
+    let reader = new FileReader();
+    reader.onload = (e) => {
+      log("RTC: ", e.target.result);
+      this._send(e.target.result);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  sendSignal(message) {
+    message.to = this.peerId;
+    message.type = "signal";
+    this.server.send(message);
+  }
+
+  _onFileHeader(data) {
+    // create new fileDigester to handle current data transfer
+    console.log("file header ", data);
+    this._fileDigester = new FileDigester(
+      {
+        name: data.name,
+        mime: data.mime,
+        size: data.size,
+      },
+      (proxyFile) => this._onFileReceived(proxyFile)
+    );
+  }
+
+  _onChunkReceived(chunk) {
+    // send chunk to filedigester
+    if (this._fileDigester) {
+      this._fileDigester.unchunk(chunk);
+    }
+  }
+
+  _onTransferComplete() {
+    this._busy = false;
+    this._deQueueFile();
+    // set progress to 1
+    // remove file chunker if any
+    // do necessary clean up
+  }
+
+  _onFileReceived(proxyFile) {
+    log("file-received ", proxyFile);
+    Events.fire("file-received", proxyFile);
+    this._sendJson({ type: "tranfer-complete" });
+    // publish file received event for download dialog to initiate download
+  }
+
+  _onMessage(message) {
+    log("Received data  ", typeof message);
+    // handle object type data
+    if (typeof message != "string") {
+      return this._onChunkReceived(message);
+    }
+
+    log("parse ", message);
+    let data = JSON.parse(message);
+    // handle string type data
+    switch (data.type) {
+      // handle progress
+      case "progress":
+        break;
+      // handle fileHeader
+      case "file-header":
+        this._onFileHeader(data);
+        break;
+      // handle tranfer complete
+      case "tranfer-complete":
+        this._onTransferComplete();
+    }
+  }
+}
+
+class PeerConnection extends RTCPeer {
+  constructor(server, peerId) {
+    super(peerId, server);
     // this.stream = stream;
-    this.config = RTC_Config;
-    this.existingTracks = [];
-    console.log("new peer ", peerId);
+    this.config = RTC_Config;    
+    if (!peerId) return;
     this._connect(this.peerId, true);
   }
 
   _connect(peerId, isCaller) {
-    this.peerId = peerId;
-    this.peerConnection = new RTCPeerConnection(this.config);
-    this.peerConnection.onicecandidate = e => this.onIceCandidate(e);
-    this.peerConnection.onconnectionstatechange = e => this.onConnectionStateChange();
-    this.peerConnection.oniceconnectionstatechange = e => this.onIceConnectionStateChange();
-
+    if (!this.peerConnection) this._openConnection(peerId, isCaller);
     // this.listenToPeerEvents();
     if (isCaller) {
       this._openChannel();
     } else {
-      this.peerConnection.ondatachannel = (e) => this._channelOpened(e);
+      this.peerConnection.ondatachannel = (e) => this._onDataChannel(e);
     }
+  }
+
+  _openConnection(peerId, isCaller) {
+    this.peerId = peerId;
+    this.peerConnection = new RTCPeerConnection(this.config);
+    this.peerConnection.onicecandidate = (e) => this.onIceCandidate(e);
+    this.peerConnection.onconnectionstatechange = (e) =>
+      this.onConnectionStateChange();
+    this.peerConnection.oniceconnectionstatechange = (e) =>
+      this.onIceConnectionStateChange();
   }
 
   _openChannel() {
@@ -60,14 +183,33 @@ class PeerConnection {
 
   _channelOpened(e) {
     // handle channel opened
+    log("RTC: channel opened ", e);
     this.channel = e.channel || e.target;
-    this.channel.onmessage = this._onMessage;
+    this.channel.onmessage = (e) => this._onMessage(e.data);
     this.channel.onerror = this._onChannelClosed;
   }
 
+  _onDataChannel(e) {
+    // handle channel opened
+    log("RTC: channel event ", e);
+    this.channel = e.channel || e.target;
+    this.channel.onmessage = (e) => this._onMessage(e.data);
+    this.channel.onerror = this._onChannelClosed;
+  }
+
+  _send(message) {
+    if (!this.channel) this.refresh();
+    log("send ", message);
+    this.channel.send(message);
+  }
+
   onConnectionStateChange(evt) {
-    log("Connection state changed ", this.peerId, this.peerConnection.connectionState);
-    
+    log(
+      "Connection state changed ",
+      this.peerId,
+      this.peerConnection.connectionState
+    );
+
     switch (this.peerConnection.connectionState) {
       case "disconnected":
         this._onChannelClosed();
@@ -80,10 +222,10 @@ class PeerConnection {
   }
 
   _onDescription(desc) {
-    // console.log('new des ', desc)
+    console.log("sdp ", desc);
     this.peerConnection
       .setLocalDescription(new RTCSessionDescription(desc))
-      .then(_ => {
+      .then((_) => {
         // console.log('description ', desc)
         this.sendSignal({ sdp: desc });
       })
@@ -91,28 +233,21 @@ class PeerConnection {
   }
 
   onIceConnectionStateChange(evt) {
-    console.log("ice connection state changed");
+    console.log(
+      "ice connection state changed ",
+      this.peerConnection.iceConnectionState
+    );
   }
 
   onIceCandidate(evt) {
     if (!evt.candidate) return;
-    // console.log('ice ', evt);
+    console.log("ice ", evt.candidate);
     this.sendSignal({ ice: evt.candidate });
   }
 
-  sendSignal(message) {
-    message.to = this.peerId;
-    message.type = "signal";
-    this.server.send(message);
-  }
-
-  _onMessage(evt) {
-    log("Received data  ", evt.data);
-  }
-
   onServerMessage(data) {
-    // log("server message ", data.type);
-    if (!this.peerConnection) this.refresh();
+    log("WS: ", data);
+    if (!this.peerConnection) this._connect(data.sender, false);
 
     if (data.sdp) {
       this.peerConnection
@@ -132,7 +267,7 @@ class PeerConnection {
 
   _onChannelClosed(e) {
     if (!this.isCaller) return;
-    this._connect(); // reconnect channel
+    this._connect(this.peerId, this.isCaller); // reconnect channel
   }
 
   onError(err) {
@@ -140,9 +275,9 @@ class PeerConnection {
   }
 
   refresh() {
-    if (this.channel || this.channel.readystate === "open") return;
-    if (this.channel || this.channel.readystate === "connection") return;
-    this.connect();
+    if (this.channel && this.channel.readystate === "open") return;
+    if (this.channel && this.channel.readystate === "connection") return;
+    this._connect(this.peerId, this.isCaller);
   }
 
   listenToPeerEvents() {

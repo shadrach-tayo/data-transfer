@@ -41,10 +41,7 @@ class Peer {
     }
 
     getInfo() {
-        return {
-            id: this.id,
-            name: this.name
-        };
+        return this.name
     }
 
 
@@ -61,6 +58,7 @@ class Peer {
         }
 
         this.hashedIp = hash(this.ip);
+        this.ip = hash(this.ip);
     }
 
     private setName() {
@@ -75,6 +73,7 @@ class Peer {
             displayName: uniqueNamesGenerator({ length: 2, separator: ' ', dictionaries: [colors, animals], style: 'capital' }),
         };
     }
+
 
     static uuid() {
         let uuid = '',
@@ -129,7 +128,7 @@ export class Server {
 
     private configureApp(): void {
         this.app.use(express.static(path.join(__dirname, '../frontend/public')))
-        setInterval(() => this.notifyDevices(), 3000)
+        // setInterval(() => this.notifyDevices(), 3000)
     }
 
     private handleRoutes(): void {
@@ -160,7 +159,7 @@ export class Server {
                 }, [])
 
                 let socket = peer.socket;
-                let msg = { buddies, type: 'buddies' }
+                let msg = { buddies, type: 'peers' }
                 let currState = hash(JSON.stringify(buddies))
                 if (currState != socket.laststate) {
                     socket.send(msg);
@@ -179,7 +178,7 @@ export class Server {
 
         peer.socket.on('disconnect', () => this.leaveRoom(peer))
 
-        peer.socket.on('message', (message) => this.onMessage(peer, message))        
+        peer.socket.on('message', (message) => this.onMessage(peer, message))
 
     }
 
@@ -220,6 +219,25 @@ export class Server {
             this.rooms[peer.ip] = {};
         }
 
+        // notify peer of other peers
+        for (const otherPeerId in this.rooms[peer.ip]) {
+            let otherPeer = this.rooms[peer.ip][otherPeerId]
+            // if(otherPeer.id == peer.id) continue;
+            this.send(otherPeer, { type: 'peer-joined', peer: peer.getInfo() })
+        }
+
+        // notify peer about the other peers
+        const otherPeers = [];
+        for (const otherPeerId in this.rooms[peer.ip]) {
+            otherPeers.push(this.rooms[peer.ip][otherPeerId].getInfo());
+        }
+
+        this.send(peer, {
+            type: 'peers',
+            peers: otherPeers
+        });
+
+
         this.rooms[peer.ip][peer.id] = peer;
     }
 
@@ -245,4 +263,4 @@ export class Server {
         console.log('port ', this.DEFAULT_PORT)
         this.httpServer.listen(this.DEFAULT_PORT, () => callback(this.DEFAULT_PORT))
     }
-}
+};
