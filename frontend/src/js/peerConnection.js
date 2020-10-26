@@ -29,7 +29,7 @@ class RTCPeer {
   }
 
   sendFiles(files) {
-    log("files ", files.length);
+    log("files ", files.length, this._busy);
     for (let i = 0; i < files.length; i++) {
       this._fileQueue.push(files[i]);
     }
@@ -38,7 +38,7 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log("dequeue file -----------------", this._fileQueue.length);
+    log("dequeue file -----------------", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();

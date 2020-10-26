@@ -23,8 +23,7 @@
         </div>
       </header>
       <div class="content-container">
-        <div class="peers" id="peers">
-         
+        <div class="peers" id="peers">         
         </div>
         <div class="details">
           <!-- <p>
@@ -36,6 +35,46 @@
         </div>
       </div>
     </div>
+    <!-- <div class="dialog">
+      <div class="dialog-card">
+
+      </div>
+    </div> -->
+    <!-- #receiveDialog -->
+    <div class="dialog" id="receiveDialog">
+      <div class="dialog-card">
+        <h2>File Received</h2>
+        <p id="fileName">File name </p>
+        <span id="size">300kb</span>
+        <div class="button-row align-right">
+          <button class="button" close>Ignore</button>
+          <a class="button" id="download">Download</button>
+        </div>
+      </div>
+    </div>
+    <!-- #receiveTextDialog -->
+    <div class="dialog" id="receiveText" >
+      <div class="dialog-card">
+          <h2>Message Received</h2>
+          <p id="text">message</p>          
+          <div class="button-row align-right">
+            <button class="button" close>close</button>
+            <button class="button" id="copy">copy</button>
+          </div>
+      </div>
+    </div>
+    <!-- #SendTextDialog -->
+    <div class="dialog" id="sendText">
+      <div class="dialog-card">
+          <h2>Send a Message</h2>
+          <input type="text" id="input-text" placeholder="send a message">
+          <div class="button-row align-right">
+            <button class="button" close>close</button>
+            <button class="button" id="copy">send</button>
+          </div>
+      </div>
+    </div>
+
     <!-- SVG LIBRARY -->
     <svg style="display: none">
       <symbol id="wifi-tethering" viewBox="0 0 24 24">

@@ -113,11 +113,114 @@ body {
   height: max-content;
 }
 
-.make-call {
-  display: grid;
-  align-items: flex-start;
+.dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* background-color: #595354; */
+  will-change: opacity;
+  opacity: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  height: 500px;
+  background-color: rgba(0, 0, 0, .4);
+  z-index: 5;
+  transition: opacity .3s ease-in;
+}
+
+.dialog-card {
+  width: 90%;
+  height: max-content;
+  max-width: 380px;
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  box-sizing: border-box;  
+  box-shadow: 0 2px 10px 2px rgba(0, 0, 0, 0.2);
+  will-change: tranform;
+  transform: scale(1);
+  transition: transform .3s ease-in;
+}
+
+
+.dialog:not([show]) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+
+.dialog:not([show]) .dialog-card {
+  transform: scale(0.1);
+  transition: transform .3s ease-in;
+}
+
+.dialog h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 18px;
+}
+
+.dialog p {
+  margin: 0;
+  text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.dialog span {
+  font-size: 14px;
+}
+
+.dialog .button-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.dialog a.button {
+  text-decoration: none;
+}
+
+.dialog .button {
+  color: #8a2be2ba;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  padding: 10px;
+  border-radius: 5px;
+  transition: .2s;
+  cursor: pointer;
+  outline: none;
+}
+
+.dialog .button:hover,
+.dialog .button:focus {
+  background-color: #9063ba63;
+}
+
+.dialog input[type=text] {
+  border: none;
+  background: #e4e4e4;
+  padding: 10px;
+  border-radius: 20px;
+  width: 280px;
+  color: #555;
+  font-size: 16px;
+  outline: none;
+}
+
+.dialog input[type=text]::placeholder {
+  color: #555;  
+}
+
+.dialog input[type=text]:focus {
+  background: #eeeeee;
 }
 
 label {
@@ -169,159 +272,6 @@ button.call-btn {
   border-right: 5px solid #65a9e5;
   font-weight: 500;
   transition: all 0.5s ease;
-}
-
-.video-chat-container {
-  padding: 0 20px;
-  flex: 1;
-  position: relative;
-}
-
-.talk-info {
-  font-weight: 500;
-  font-size: 21px;
-}
-
-
-.overlay_page {
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  /* display: none; */
-  position: absolute;
-  background-color: #161415;
-  will-change: transform;
-  overflow: hidden;
-
-  transform: translate3d(105%, 0, 0);
-  transition: all 0.3s cubic-bezier(0.6, -0.28, 0.735, 0.045);
-}
-
-.overlay_page.show {
-  /* display: block; */
-  transform: translate3d(0, 0, 0);
-  opacity: 1;  
-}
-
-.outgoing_call {
-  width: 100%;
-  height: 100%;
-  background-color: palegreen;
-  position: relative;
-}
-
-.video-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.control-container {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 20px;
-  display: grid;
-  align-items: center;
-  /* width: 100%; */
-  background-color: transparent;
-}
-
-.call-state {
-  visibility: hidden;
-  max-width: 0;
-}
-
-.incoming .pick-call {
-  max-width: 60px;
-  visibility: visible;
-}
-
-.incoming .drop-call {
-  max-width: 60px;
-  visibility: visible;
-}
-
-.accepted .drop-call {
-  max-width: 60px;
-  visibility: visible;
-}
-
-.accepted .pick-call {
-  max-width: 60px;
-  display: none;
-}
-
-.outgoing .drop-call {
-  max-width: 60px;
-  visibility: visible;
-}
-
-.outgoing .pick-call {
-  max-width: 0;
-  display: none;
-}
-
-
-.call-states {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 30px;  
-  gap: 30px;
-}
-
-.call-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-evenly;
-}
-
-.remote-video {
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* border: 1px solid #cddfe7; */
-  width: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  object-fit: cover;
-  height: 100%;
-  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
-}
-
-.local-video {
-  object-fit: cover;
-  position: absolute;
-  top: 0;
-  left: 0;
-  /* border: 1px solid #cddfe7; */
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
-}
-
-.mini-video {
-  object-fit: cover;
-  position: absolute;
-  border: none;
-  right: 0;
-  bottom: 0;
-  box-shadow: 0px 3px 6px rgba(0, 0, 0, 0.2);
-  border-radius: 5px;
-  width: 150px;
-  height: 200px;
-}
-
-.incoming-call {
-  background-color: rgb(175, 174, 230);
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  cursor: pointer;
 }
 
 

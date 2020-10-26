@@ -1,5 +1,6 @@
 import { PeerConnection } from "./peerConnection";
 import { Events } from "./utils";
+import { ReceiveFileDialog, ReceiveTextDialog, SendTextDialog } from "./ui";
 
 const log = console.log;
 const webSocketConnectionURL = "SOCKET_URL";
@@ -339,7 +340,10 @@ class Application {
     this.server = new Server();
     this.peersManager = new PeersManager(this.server);
     this.peersUI = new PeersUI();
-    console.log("app initialized");
+    this.receiveFileDialog = new ReceiveFileDialog();
+    // this.receiveTextDialog = new ReceiveTextDialog();
+    // this.receiveTextDialog = new SendTextDialog();
+    log("app initialized ");
   }
 }
 
@@ -348,5 +352,7 @@ const app = new Application();
 
 /**
  * Todo:
+ * 1. Implement text sending
+ * 2. debug break in data transfer
  * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
  */

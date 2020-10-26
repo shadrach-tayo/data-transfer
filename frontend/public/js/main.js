@@ -71,7 +71,7 @@ class RTCPeer {
   }
 
   sendFiles(files) {
-    log$1("files ", files.length);
+    log$1("files ", files.length, this._busy);
     for (let i = 0; i < files.length; i++) {
       this._fileQueue.push(files[i]);
     }
@@ -80,7 +80,7 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log$1("dequeue file -----------------", this._fileQueue.length);
+    log$1("dequeue file -----------------", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();
@@ -363,6 +363,85 @@ class PeerConnection extends RTCPeer {
 }
 
 const log$2 = console.log;
+
+class Dialog {
+  constructor(id) {
+    this.$el = document.getElementById(id);
+    this.$el
+      .querySelector("[close]")
+      .addEventListener("click", (e) => this.hide());
+    this.$autoFocus = document.querySelector("[autoFocus]");
+  }
+
+  show() {
+    this.$el.setAttribute("show", 1);
+    if (this.$autoFocus) this.$autoFocus.focus();
+  }
+
+  hide() {
+    this.$el.removeAttribute("show");
+    this._deQueueFile();
+  }
+}
+
+class ReceiveFileDialog extends Dialog {
+  constructor() {
+    super("receiveDialog");
+    this._fileQueue = [];
+    Events.on("file-received", (e) => this._newFile(e.detail));
+  }
+
+  _newFile(file) {
+    log$2("Dialog: file", file, this._busy);
+    // play notification sound
+    if (file) this._fileQueue.push(file);
+
+    if (this._busy) return;
+    this._busy = true;
+    let nextFile = this._fileQueue.shift();
+    this._displayFile(nextFile);
+  }
+
+  _deQueueFile() {
+    if (!this._fileQueue.length) {
+      this._busy = false;
+      return;
+    }
+
+    // schedule next file
+    setTimeout(() => {
+      this._busy = false;
+      this._newFile();
+    });
+  }
+
+  _displayFile(file) {
+    this.$a = this.$el.querySelector("#download");
+    const url = URL.createObjectURL(file.blob);
+    this.$a.href = url;
+    this.$a.download = file.name;
+    this.show();
+
+    this.$el.querySelector("#fileName").textContent = file.name;
+    this.$el.querySelector("#size").textContent = this._getFileSize(file.size);
+
+    // if download isn't supported use file reader to create data url and set as download link
+  }
+
+  _getFileSize(bytes) {
+    if (bytes >= 1e9) {
+      return Math.round(bytes / 1e8) / 10 + " GB";
+    } else if (bytes >= 1e6) {
+      return Math.round(bytes / 1e5) / 10 + " MB";
+    } else if (bytes > 1000) {
+      return Math.round(bytes / 1000) + " KB";
+    } else {
+      return bytes + " Bytes";
+    }
+  }
+}
+
+const log$3 = console.log;
 const webSocketConnectionURL = "wss://localhost:8000";
 
 function setLocalId(id) {
@@ -438,13 +517,13 @@ class Server {
     });
 
     this.socket.on("error", (error) => {
-      log$2(" socket connection error ", error);
+      log$3(" socket connection error ", error);
     });
 
     this.socket.on("close", this.onDisconnect);
 
     this.socket.on("disconnect", (evt) => {
-      log$2(" socket disconnected ", !this.socket.connected);
+      log$3(" socket disconnected ", !this.socket.connected);
       this.onDisconnect();
     });
 
@@ -486,16 +565,16 @@ class Server {
   }
 
   cleanUp() {
-    log$2("clean up task ", this.peerConnection);
+    log$3("clean up task ", this.peerConnection);
     this.socket.close();
   }
 
   onDisconnect() {
-    log$2(" socket disconnected ", !this.socket.connected);
+    log$3(" socket disconnected ", !this.socket.connected);
   }
 
   disconnect() {
-    log$2("disconnect ", this.socket, this.peerConnection);
+    log$3("disconnect ", this.socket, this.peerConnection);
   }
 
   isConnected() {
@@ -607,7 +686,7 @@ class PeersManager {
 
   _onFileSelected(message) {
     // console.log("files-selected ", message);
-    log$2("file selected ", message.to, this.peers[message.to]);
+    log$3("file selected ", message.to, this.peers[message.to]);
     // TODO: handle cases where peer isn't found
     this.peers[message.to].sendFiles(message.files);
   }
@@ -661,7 +740,7 @@ class PeersUI {
 
   clearPeers() {
     this.$el.childNodes.forEach((child) => {
-      log$2("clear child ", child);
+      log$3("clear child ", child);
       child.remove();
     });
   }
@@ -672,7 +751,10 @@ class Application {
     this.server = new Server();
     this.peersManager = new PeersManager(this.server);
     this.peersUI = new PeersUI();
-    console.log("app initialized");
+    this.receiveFileDialog = new ReceiveFileDialog();
+    // this.receiveTextDialog = new ReceiveTextDialog();
+    // this.receiveTextDialog = new SendTextDialog();
+    log$3("app initialized ");
   }
 }
 
@@ -681,5 +763,7 @@ const app = new Application();
 
 /**
  * Todo:
+ * 1. Implement text sending
+ * 2. debug break in data transfer
  * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
  */
