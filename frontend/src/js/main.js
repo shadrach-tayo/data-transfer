@@ -215,9 +215,9 @@ class PeerUI {
     //  el.addEventListener("dragend", (e) => this._onDragEnd(e));
     //  el.addEventListener("dragleave", (e) => this._onDragEnd(e));
     //  el.addEventListener("dragover", (e) => this._onDragOver(e));
-    //  el.addEventListener("contextmenu", (e) => this._onRightClick(e));
-    //  el.addEventListener("touchstart", (e) => this._onTouchStart(e));
-    //  el.addEventListener("touchend", (e) => this._onTouchEnd(e));
+    el.addEventListener("contextmenu", (e) => this._onRightClick(e));
+    el.addEventListener("touchstart", (e) => this._onTouchStart(e));
+    el.addEventListener("touchend", (e) => this._onTouchEnd(e));
   }
 
   _icon() {
@@ -233,6 +233,25 @@ class PeerUI {
       to: this._peer.id,
     });
     input.value = null;
+  }
+
+  _onTouchStart() {
+    this._touchStart = Date.now();
+    this._touchTimer = setTimeout(() => this._onTouchEnd(), 600);
+  }
+
+  _onTouchEnd(evt) {
+    if (!(Date.now() - this._touchStart < 500)) {
+      log("end touch ", Date.now() - this._touchStart < 500);
+      if (evt) evt.preventDefault();
+      Events.fire("new-text", this._peer.id);
+    }
+    clearTimeout(this._touchTimer);
+  }
+
+  _onRightClick(e) {
+    e.preventDefault();
+    Events.fire("new-text", this._peer.id);
   }
 }
 
@@ -341,8 +360,8 @@ class Application {
     this.peersManager = new PeersManager(this.server);
     this.peersUI = new PeersUI();
     this.receiveFileDialog = new ReceiveFileDialog();
-    // this.receiveTextDialog = new ReceiveTextDialog();
-    // this.receiveTextDialog = new SendTextDialog();
+    this.receiveTextDialog = new ReceiveTextDialog();
+    this.sendTextDialog = new SendTextDialog();
     log("app initialized ");
   }
 }
@@ -352,7 +371,6 @@ const app = new Application();
 
 /**
  * Todo:
- * 1. Implement text sending
  * 2. debug break in data transfer
  * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
  */

@@ -127,6 +127,11 @@ class RTCPeer {
     // handle string type data
     switch (data.type) {
       // handle progress
+      case "text":
+        log("new text ", data.text);
+        Events.fire("receive-text", data.text);
+        break;
+      // handle fileHeader
       case "progress":
         break;
       // handle fileHeader

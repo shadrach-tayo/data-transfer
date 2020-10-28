@@ -169,6 +169,11 @@ class RTCPeer {
     // handle string type data
     switch (data.type) {
       // handle progress
+      case "text":
+        log$1("new text ", data.text);
+        Events.fire("receive-text", data.text);
+        break;
+      // handle fileHeader
       case "progress":
         break;
       // handle fileHeader
@@ -363,6 +368,7 @@ class PeerConnection extends RTCPeer {
 }
 
 const log$2 = console.log;
+const isURL = (text) => /^((https?:\/\/|www)[^\s]+)/g.test(text.toLowerCase());
 
 class Dialog {
   constructor(id) {
@@ -380,7 +386,6 @@ class Dialog {
 
   hide() {
     this.$el.removeAttribute("show");
-    this._deQueueFile();
   }
 }
 
@@ -389,6 +394,11 @@ class ReceiveFileDialog extends Dialog {
     super("receiveDialog");
     this._fileQueue = [];
     Events.on("file-received", (e) => this._newFile(e.detail));
+  }
+
+  hide() {
+    super.hide();
+    this._deQueueFile();
   }
 
   _newFile(file) {
@@ -440,6 +450,106 @@ class ReceiveFileDialog extends Dialog {
     }
   }
 }
+
+class ReceiveTextDialog extends Dialog {
+  constructor() {
+    super("receiveText");
+    this.$text = this.$el.querySelector("#text");
+    this.$el
+      .querySelector("#copy")
+      .addEventListener("click", (e) => this._onCopyText());
+    Events.on("receive-text", (e) => this._onNewText(e.detail));
+  }
+
+  _onNewText(text) {
+    this.$text.innerHTML = "";
+    if (isURL(text)) {
+      let a = document.createElement("a");
+      a.href = text;
+      a.textContent = text;
+      a.target = "_blank";
+      this.$text.appendChild(a);
+    } else {
+      this.$text.textContent = text;
+    }
+    this.show();
+  }
+
+  _onCopyText() {
+    try {
+      navigator.clipboard
+        .writeText(this.$text.textContent)
+        .then((val) => {
+          log$2("copied text", this.$text.textContent);
+          this.hide();
+          // display toast
+        })
+        .catch((err) => {
+          if (document.copyText(this.$text.textContent)) {
+            // notify user
+          }
+          this.hide();
+        });
+    } catch (e) {
+      if (document.copyText(this.$text.textContent)) ;
+      this.hide();
+    }
+  }
+}
+
+class SendTextDialog extends Dialog {
+  constructor() {
+    super("sendText");
+    this.$text = this.$el.querySelector("#input-text");
+    this.$form = this.$el.querySelector("#sendTextForm");
+    this.$form.addEventListener("submit", (e) => this._onSendText(e));
+    Events.on("new-text", (e) => this._onNewText(e.detail));
+  }
+
+  _onNewText(receipient) {
+    log$2("open sender: ", receipient);
+    this._receipient = receipient;
+    this.show();
+    this.$text.setSelectionRange(0, this.$text.value.length);
+  }
+
+  _onSendText(e) {
+    e.preventDefault();
+    Events.fire("send-text", {
+      to: this._receipient,
+      text: this.$text.value,
+    });
+    this.hide();
+  }
+}
+
+document.copyText = (text) => {
+  const span = document.createElement("span");
+  span.textContent = text;
+
+  span.style.position = "absolute";
+  span.style.top = "-99999px";
+  span.style.left = "-99999px";
+
+  window.document.body.appendChild(span);
+
+  const selection = document.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(span);
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+    log$2("copied ", copied);
+  } catch (e) {}
+
+  selection.removeAllRanges();
+  span.remove();
+
+  return copied;
+};
 
 const log$3 = console.log;
 const webSocketConnectionURL = "wss://localhost:8000";
@@ -626,9 +736,9 @@ class PeerUI {
     //  el.addEventListener("dragend", (e) => this._onDragEnd(e));
     //  el.addEventListener("dragleave", (e) => this._onDragEnd(e));
     //  el.addEventListener("dragover", (e) => this._onDragOver(e));
-    //  el.addEventListener("contextmenu", (e) => this._onRightClick(e));
-    //  el.addEventListener("touchstart", (e) => this._onTouchStart(e));
-    //  el.addEventListener("touchend", (e) => this._onTouchEnd(e));
+    el.addEventListener("contextmenu", (e) => this._onRightClick(e));
+    el.addEventListener("touchstart", (e) => this._onTouchStart(e));
+    el.addEventListener("touchend", (e) => this._onTouchEnd(e));
   }
 
   _icon() {
@@ -644,6 +754,25 @@ class PeerUI {
       to: this._peer.id,
     });
     input.value = null;
+  }
+
+  _onTouchStart() {
+    this._touchStart = Date.now();
+    this._touchTimer = setTimeout(() => this._onTouchEnd(), 600);
+  }
+
+  _onTouchEnd(evt) {
+    if (!(Date.now() - this._touchStart < 500)) {
+      log$3("end touch ", Date.now() - this._touchStart < 500);
+      if (evt) evt.preventDefault();
+      Events.fire("new-text", this._peer.id);
+    }
+    clearTimeout(this._touchTimer);
+  }
+
+  _onRightClick(e) {
+    e.preventDefault();
+    Events.fire("new-text", this._peer.id);
   }
 }
 
@@ -752,8 +881,8 @@ class Application {
     this.peersManager = new PeersManager(this.server);
     this.peersUI = new PeersUI();
     this.receiveFileDialog = new ReceiveFileDialog();
-    // this.receiveTextDialog = new ReceiveTextDialog();
-    // this.receiveTextDialog = new SendTextDialog();
+    this.receiveTextDialog = new ReceiveTextDialog();
+    this.sendTextDialog = new SendTextDialog();
     log$3("app initialized ");
   }
 }
@@ -763,7 +892,6 @@ const app = new Application();
 
 /**
  * Todo:
- * 1. Implement text sending
  * 2. debug break in data transfer
  * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
  */
