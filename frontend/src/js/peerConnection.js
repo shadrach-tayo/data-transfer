@@ -1,4 +1,4 @@
-import { FileDigester, Events } from "./utils";
+import { FileDigester, Events, FileSender } from "./utils";
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log = console.log;
 
@@ -38,7 +38,6 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log("dequeue file -----", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();
@@ -62,13 +61,30 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-    
-    let reader = new FileReader();
-    reader.onload = (e) => {
-      log("RTC: ", e.target.result);
-      this._send(e.target.result);
-    };
-    reader.readAsArrayBuffer(file);
+
+    // create new fileSender to send files
+    this._fileSender = new FileSender(
+      file,
+      (chunk) => this._send(chunk),
+      (offset) => this.onPartitionEnd(offset)
+    );
+    this._fileSender.nextPartition();
+  }
+
+  onPartitionReceived(chunk) {
+    this._send(chunk);
+  }
+
+  onPartitionEnd(offset) {
+    // current file transfer has finished
+    log("Partition End");
+    this._sendJson({ type: "partition", offset });
+  }
+
+  nextPartition() {
+    // log('next---- ', this._fileSender)
+    if (!this._fileSender || this._fileSender.isFileEnd()) return;
+    this._fileSender.nextPartition();
   }
 
   sendSignal(message) {
@@ -96,8 +112,8 @@ class RTCPeer {
       this._fileDigester.unchunk(chunk);
       this._onDownloadProgress(this._fileDigester.progress);
       // send progress to sender
-      if(this._fileDigester.progress <= 0.1) return;
-      this.sendProgress(this._fileDigester.progress)
+      if (this._fileDigester.progress <= 0.1) return;
+      this.sendProgress(this._fileDigester.progress);
     }
   }
 
@@ -107,6 +123,7 @@ class RTCPeer {
     this._busy = false;
     this._deQueueFile();
     // remove file chunker if any
+    this._fileSender = null;
     // do necessary clean up
   }
 
@@ -118,23 +135,30 @@ class RTCPeer {
   }
 
   _onMessage(message) {
-    log("Received data  ", typeof message);
+    // log("Received data  ", typeof message);
     // handle object type data
     if (typeof message != "string") {
       return this._onChunkReceived(message);
     }
 
-    log("parse ", message);
+    // log("parse ", message);
     let data = JSON.parse(message);
     // handle string type data
     switch (data.type) {
+      case "partition":
+        this._sendJson({ type: "partition-received", offset: data.offset });
+        break;
+      case "partition-received":
+        log("partition-received", data.offset);
+        this.nextPartition();
+        break;
       case "text":
-        log("new text ", data.text);
+        // log("new text ", data.text);
         Events.fire("receive-text", data.text);
         break;
       // handle progress
       case "progress":
-        this._onDownloadProgress(data.progress)
+        this._onDownloadProgress(data.progress);
         break;
       // handle fileHeader
       case "file-header":
@@ -147,11 +171,11 @@ class RTCPeer {
   }
 
   sendProgress(progress) {
-    this._sendJson({type: 'progress', progress})
+    this._sendJson({ type: "progress", progress });
   }
 
   _onDownloadProgress(progress) {
-    Events.fire('file-progress', {sender: this.peerId, progress})
+    Events.fire("file-progress", { sender: this.peerId, progress });
   }
 }
 
@@ -215,7 +239,7 @@ class PeerConnection extends RTCPeer {
 
   _send(message) {
     if (!this.channel) this.refresh();
-    log("DC: send ", message, this.channel);
+    // log("DC: send ",);
     this.channel.send(message);
   }
 

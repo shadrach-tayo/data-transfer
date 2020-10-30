@@ -261,7 +261,7 @@ class PeerUI {
   }
 
   setProgress(progress) {
-    log("progress ", progress);
+    // log("progress ", progress);
     // handle code visually indicate UI progress
     if (progress < 0.5) {
       this.$progress.classList.remove("over50");
@@ -358,7 +358,7 @@ class PeersUI {
   }
 
   onPeerJoined(peer) {
-    log("peer joined ", peer);
+    // log("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);

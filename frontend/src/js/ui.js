@@ -34,7 +34,7 @@ class ReceiveFileDialog extends Dialog {
   }
 
   _newFile(file) {
-    log("Dialog: file", file, this._busy);
+    // log("Dialog: file", , this._busy);
     // play notification sound
     if (file) this._fileQueue.push(file);
 
@@ -54,7 +54,7 @@ class ReceiveFileDialog extends Dialog {
     setTimeout(() => {
       this._busy = false;
       this._newFile();
-    });
+    }, 400);
   }
 
   _displayFile(file) {

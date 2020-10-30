@@ -41,6 +41,59 @@ class FileDigester {
   }
 }
 
+class FileSender {
+  constructor(file, onChunk, callback) {
+    this._file = file;
+    this._onChunk = onChunk;
+    this._callback = callback;
+    this.reader = new FileReader();
+    this.reader.onload = (e) => this._sendChunk(e.target.result);
+    this._maxPacketSize = 1e6;
+    this._chunkSize = 64000; // 64 kb
+    this._offset = 0;
+    this.totalBytesSent = 0;
+  }
+
+  _sendChunk(chunk) {
+    this._offset += chunk.byteLength; // increment offset
+    this._partitionSize += chunk.byteLength;
+
+    this._onChunk(chunk); // send chunk
+
+    if (this.isFileEnd() || this.isPartitionEnd()) {
+      // call callback if chunk is finished sending
+      this._callback(this._offset);
+      return;
+    }
+
+    this._readChunk();
+  }
+
+  nextPartition() {
+    this._partitionSize = 0;
+    this._readChunk();
+  }
+
+  repeatPartition() {
+    this._offset -= this._partitionSize;
+    this.nextPartition();
+  }
+
+  _readChunk() {
+    // write logic to load next chunk from file
+    let chunk = this._file.slice(this._offset, this._offset + this._chunkSize);
+    this.reader.readAsArrayBuffer(chunk);
+  }
+
+  isPartitionEnd() {
+    return this._partitionSize >= this._maxPacketSize;
+  }
+
+  isFileEnd() {
+    return this._offset >= this._file.size;
+  }
+}
+
 const { RTCPeerConnection, RTCSessionDescription } = window;
 const log$1 = console.log;
 
@@ -80,7 +133,6 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log$1("dequeue file -----", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();
@@ -104,13 +156,30 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-    
-    let reader = new FileReader();
-    reader.onload = (e) => {
-      log$1("RTC: ", e.target.result);
-      this._send(e.target.result);
-    };
-    reader.readAsArrayBuffer(file);
+
+    // create new fileSender to send files
+    this._fileSender = new FileSender(
+      file,
+      (chunk) => this._send(chunk),
+      (offset) => this.onPartitionEnd(offset)
+    );
+    this._fileSender.nextPartition();
+  }
+
+  onPartitionReceived(chunk) {
+    this._send(chunk);
+  }
+
+  onPartitionEnd(offset) {
+    // current file transfer has finished
+    log$1("Partition End");
+    this._sendJson({ type: "partition", offset });
+  }
+
+  nextPartition() {
+    // log('next---- ', this._fileSender)
+    if (!this._fileSender || this._fileSender.isFileEnd()) return;
+    this._fileSender.nextPartition();
   }
 
   sendSignal(message) {
@@ -138,7 +207,7 @@ class RTCPeer {
       this._fileDigester.unchunk(chunk);
       this._onDownloadProgress(this._fileDigester.progress);
       // send progress to sender
-      if(this._fileDigester.progress <= 0.1) return;
+      if (this._fileDigester.progress <= 0.1) return;
       this.sendProgress(this._fileDigester.progress);
     }
   }
@@ -149,6 +218,7 @@ class RTCPeer {
     this._busy = false;
     this._deQueueFile();
     // remove file chunker if any
+    this._fileSender = null;
     // do necessary clean up
   }
 
@@ -160,18 +230,25 @@ class RTCPeer {
   }
 
   _onMessage(message) {
-    log$1("Received data  ", typeof message);
+    // log("Received data  ", typeof message);
     // handle object type data
     if (typeof message != "string") {
       return this._onChunkReceived(message);
     }
 
-    log$1("parse ", message);
+    // log("parse ", message);
     let data = JSON.parse(message);
     // handle string type data
     switch (data.type) {
+      case "partition":
+        this._sendJson({ type: "partition-received", offset: data.offset });
+        break;
+      case "partition-received":
+        log$1("partition-received", data.offset);
+        this.nextPartition();
+        break;
       case "text":
-        log$1("new text ", data.text);
+        // log("new text ", data.text);
         Events.fire("receive-text", data.text);
         break;
       // handle progress
@@ -189,11 +266,11 @@ class RTCPeer {
   }
 
   sendProgress(progress) {
-    this._sendJson({type: 'progress', progress});
+    this._sendJson({ type: "progress", progress });
   }
 
   _onDownloadProgress(progress) {
-    Events.fire('file-progress', {sender: this.peerId, progress});
+    Events.fire("file-progress", { sender: this.peerId, progress });
   }
 }
 
@@ -257,7 +334,7 @@ class PeerConnection extends RTCPeer {
 
   _send(message) {
     if (!this.channel) this.refresh();
-    log$1("DC: send ", message, this.channel);
+    // log("DC: send ",);
     this.channel.send(message);
   }
 
@@ -419,7 +496,7 @@ class ReceiveFileDialog extends Dialog {
   }
 
   _newFile(file) {
-    log$2("Dialog: file", file, this._busy);
+    // log("Dialog: file", , this._busy);
     // play notification sound
     if (file) this._fileQueue.push(file);
 
@@ -439,7 +516,7 @@ class ReceiveFileDialog extends Dialog {
     setTimeout(() => {
       this._busy = false;
       this._newFile();
-    });
+    }, 400);
   }
 
   _displayFile(file) {
@@ -799,7 +876,7 @@ class PeerUI {
   }
 
   setProgress(progress) {
-    log$3("progress ", progress);
+    // log("progress ", progress);
     // handle code visually indicate UI progress
     if (progress < 0.5) {
       this.$progress.classList.remove("over50");
@@ -896,7 +973,7 @@ class PeersUI {
   }
 
   onPeerJoined(peer) {
-    log$3("peer joined ", peer);
+    // log("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
