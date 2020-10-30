@@ -193,6 +193,10 @@ class PeerUI {
             <use xlink:href="#desktop-mac" />
           </svg>
         </div>
+         <div class="progress">
+            <div class="circle"></div>
+            <div class="circle right"></div>
+          </div>
         <div class="peer-name"></div>
       </label>`;
   }
@@ -201,9 +205,11 @@ class PeerUI {
     const el = document.createElement("div");
     el.classList.add("peer");
     el.id = this._peer.id;
+    el.ui = this;
     el.innerHTML = this.html();
     el.querySelector("svg use").setAttribute("xlink:href", this._icon());
     el.querySelector(".peer-name").textContent = this._peer.displayName;
+    this.$progress = el.querySelector(".progress");
     this.$el = el;
   }
 
@@ -253,6 +259,24 @@ class PeerUI {
     e.preventDefault();
     Events.fire("new-text", this._peer.id);
   }
+
+  setProgress(progress) {
+    log("progress ", progress);
+    // handle code visually indicate UI progress
+    if (progress < 0.5) {
+      this.$progress.classList.remove("over50");
+    } else {
+      this.$progress.classList.add("over50");
+    }
+    this.$progress.style.setProperty(
+      "--progress",
+      `rotate(${360 * progress}deg)`
+    );
+
+    if (progress >= 1) {
+      return this.setProgress(0);
+    }
+  }
 }
 
 class PeersManager {
@@ -261,25 +285,28 @@ class PeersManager {
     this.server = serverConnection;
     Events.on("signal", (evt) => this._onSignal(evt.detail));
     Events.on("peers", (evt) => this._onPeers(evt.detail));
+    // Events.on("peer-joined", (e) => this.onPeer(e.detail));
     Events.on("files-selected", (evt) => this._onFileSelected(evt.detail));
     Events.on("peer-left", (evt) => this._onPeerLeft(evt.detail));
     Events.on("send-text", (evt) => this._onSendText(evt.detail));
   }
 
+  onPeer(peer) {
+    if (this.peers[peer.id]) {
+      // handle existing peers
+      this.peers[peer.id].refresh();
+      return;
+    } else {
+      this.peers[peer.id] = new PeerConnection(this.server, peer.id);
+      // Events.fire('peer-joined', peer);
+      // handle browsers that don't support RTCPeer
+    }
+  }
+
   _onPeers(data) {
     let peers = data.peers;
 
-    peers.forEach((peer) => {
-      if (this.peers[peer.id]) {
-        // handle existing peers
-        this.peers[peer.id].refresh();
-        return;
-      } else {
-        this.peers[peer.id] = new PeerConnection(this.server, peer.id);
-        // Events.fire('peer-joined', peer);
-        // handle browsers that don't support RTCPeer
-      }
-    });
+    peers.forEach((peer) => this.onPeer(peer));
   }
 
   _onSignal(message) {
@@ -331,6 +358,7 @@ class PeersUI {
   }
 
   onPeerJoined(peer) {
+    log("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
@@ -344,11 +372,14 @@ class PeersUI {
   }
 
   onPaste(e) {}
-  onFileProgress(e) {}
+
+  onFileProgress(data) {
+    let peer = document.getElementById(data.sender);
+    peer && peer.ui.setProgress(data.progress);
+  }
 
   clearPeers() {
     this.$el.childNodes.forEach((child) => {
-      log("clear child ", child);
       child.remove();
     });
   }
@@ -371,6 +402,7 @@ const app = new Application();
 
 /**
  * Todo:
- * 2. debug break in data transfer
- * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
+ * 2. Display placeholder text intruction and icon when no peer is connected
+ * 1. implement a FileChunker and a FileDigester to ease file transfer between peers
+ * **. debug break in data transfer
  */

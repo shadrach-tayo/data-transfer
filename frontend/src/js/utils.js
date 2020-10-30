@@ -24,11 +24,11 @@ class FileDigester {
   }
 
   unchunk(chunk) {
-    log("Chunk ", chunk);
     this._buffer.push(chunk);
     this._bytesReceived += chunk.byteLength || chunk.size;
 
-    this.progress = this._bytesReceived / this.size;
+    this.progress = this._bytesReceived / this._size;
+    log("progress ", this._bytesReceived, this._size);
 
     if (this._bytesReceived < this._size) return; // tranfer note complete
 

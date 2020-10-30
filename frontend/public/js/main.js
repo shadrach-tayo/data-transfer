@@ -26,11 +26,11 @@ class FileDigester {
   }
 
   unchunk(chunk) {
-    log("Chunk ", chunk);
     this._buffer.push(chunk);
     this._bytesReceived += chunk.byteLength || chunk.size;
 
-    this.progress = this._bytesReceived / this.size;
+    this.progress = this._bytesReceived / this._size;
+    log("progress ", this._bytesReceived, this._size);
 
     if (this._bytesReceived < this._size) return; // tranfer note complete
 
@@ -80,7 +80,7 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log$1("dequeue file -----------------", this._fileQueue.length, this._busy);
+    log$1("dequeue file -----", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();
@@ -92,7 +92,7 @@ class RTCPeer {
   }
 
   sendText(text) {
-    this._sendJson({type: 'text', text});
+    this._sendJson({ type: "text", text });
   }
 
   sendFile(file) {
@@ -104,9 +104,6 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-    // create fileDigester to handle new files
-    // send message to indicate success full tranfer
-    // track progress
     
     let reader = new FileReader();
     reader.onload = (e) => {
@@ -139,13 +136,18 @@ class RTCPeer {
     // send chunk to filedigester
     if (this._fileDigester) {
       this._fileDigester.unchunk(chunk);
+      this._onDownloadProgress(this._fileDigester.progress);
+      // send progress to sender
+      if(this._fileDigester.progress <= 0.1) return;
+      this.sendProgress(this._fileDigester.progress);
     }
   }
 
   _onTransferComplete() {
+    // set progress to 1
+    this._onDownloadProgress(1);
     this._busy = false;
     this._deQueueFile();
-    // set progress to 1
     // remove file chunker if any
     // do necessary clean up
   }
@@ -168,13 +170,13 @@ class RTCPeer {
     let data = JSON.parse(message);
     // handle string type data
     switch (data.type) {
-      // handle progress
       case "text":
         log$1("new text ", data.text);
         Events.fire("receive-text", data.text);
         break;
-      // handle fileHeader
+      // handle progress
       case "progress":
+        this._onDownloadProgress(data.progress);
         break;
       // handle fileHeader
       case "file-header":
@@ -185,13 +187,21 @@ class RTCPeer {
         this._onTransferComplete();
     }
   }
+
+  sendProgress(progress) {
+    this._sendJson({type: 'progress', progress});
+  }
+
+  _onDownloadProgress(progress) {
+    Events.fire('file-progress', {sender: this.peerId, progress});
+  }
 }
 
 class PeerConnection extends RTCPeer {
   constructor(server, peerId) {
     super(peerId, server);
     // this.stream = stream;
-    this.config = RTC_Config;    
+    this.config = RTC_Config;
     if (!peerId) return;
     this._connect(this.peerId, true);
   }
@@ -231,7 +241,7 @@ class PeerConnection extends RTCPeer {
   _channelOpened(e) {
     // handle channel opened
     log$1("RTC: channel opened ", e);
-    this.channel = e.channel || e.target;
+    this.channel = e.target || e.channel;
     this.channel.onmessage = (e) => this._onMessage(e.data);
     this.channel.onerror = this._onChannelClosed;
   }
@@ -241,12 +251,13 @@ class PeerConnection extends RTCPeer {
     log$1("RTC: channel event ", e);
     this.channel = e.channel || e.target;
     this.channel.onmessage = (e) => this._onMessage(e.data);
-    this.channel.onerror = this._onChannelClosed;
+    this.channel.onerror = e => this._onChannelClosed(e);
+    this.channel.onclose = e => this._onChannelClosed(e);
   }
 
   _send(message) {
     if (!this.channel) this.refresh();
-    log$1("send ", message);
+    log$1("DC: send ", message, this.channel);
     this.channel.send(message);
   }
 
@@ -269,11 +280,9 @@ class PeerConnection extends RTCPeer {
   }
 
   _onDescription(desc) {
-    console.log("sdp ", desc);
     this.peerConnection
       .setLocalDescription(new RTCSessionDescription(desc))
       .then((_) => {
-        // console.log('description ', desc)
         this.sendSignal({ sdp: desc });
       })
       .catch((e) => this.onError(e));
@@ -288,7 +297,6 @@ class PeerConnection extends RTCPeer {
 
   onIceCandidate(evt) {
     if (!evt.candidate) return;
-    console.log("ice ", evt.candidate);
     this.sendSignal({ ice: evt.candidate });
   }
 
@@ -313,6 +321,7 @@ class PeerConnection extends RTCPeer {
   }
 
   _onChannelClosed(e) {
+    log$1('DC: channel', this.channel, e);
     if (!this.isCaller) return;
     this._connect(this.peerId, this.isCaller); // reconnect channel
   }
@@ -360,6 +369,14 @@ class PeerConnection extends RTCPeer {
   addIceCandidate(data) {
     log$1("ICE Candidate received - ", data.candidate);
     this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+
+  _isConnected() {
+    return this.channel && this.channel.readystate === 'open'
+  }
+
+  _isConnecting() {
+    return this.channel && this.channel.readystate === 'connecting'
   }
 
   close() {
@@ -714,6 +731,10 @@ class PeerUI {
             <use xlink:href="#desktop-mac" />
           </svg>
         </div>
+         <div class="progress">
+            <div class="circle"></div>
+            <div class="circle right"></div>
+          </div>
         <div class="peer-name"></div>
       </label>`;
   }
@@ -722,9 +743,11 @@ class PeerUI {
     const el = document.createElement("div");
     el.classList.add("peer");
     el.id = this._peer.id;
+    el.ui = this;
     el.innerHTML = this.html();
     el.querySelector("svg use").setAttribute("xlink:href", this._icon());
     el.querySelector(".peer-name").textContent = this._peer.displayName;
+    this.$progress = el.querySelector(".progress");
     this.$el = el;
   }
 
@@ -774,6 +797,24 @@ class PeerUI {
     e.preventDefault();
     Events.fire("new-text", this._peer.id);
   }
+
+  setProgress(progress) {
+    log$3("progress ", progress);
+    // handle code visually indicate UI progress
+    if (progress < 0.5) {
+      this.$progress.classList.remove("over50");
+    } else {
+      this.$progress.classList.add("over50");
+    }
+    this.$progress.style.setProperty(
+      "--progress",
+      `rotate(${360 * progress}deg)`
+    );
+
+    if (progress >= 1) {
+      return this.setProgress(0);
+    }
+  }
 }
 
 class PeersManager {
@@ -782,25 +823,28 @@ class PeersManager {
     this.server = serverConnection;
     Events.on("signal", (evt) => this._onSignal(evt.detail));
     Events.on("peers", (evt) => this._onPeers(evt.detail));
+    // Events.on("peer-joined", (e) => this.onPeer(e.detail));
     Events.on("files-selected", (evt) => this._onFileSelected(evt.detail));
     Events.on("peer-left", (evt) => this._onPeerLeft(evt.detail));
     Events.on("send-text", (evt) => this._onSendText(evt.detail));
   }
 
+  onPeer(peer) {
+    if (this.peers[peer.id]) {
+      // handle existing peers
+      this.peers[peer.id].refresh();
+      return;
+    } else {
+      this.peers[peer.id] = new PeerConnection(this.server, peer.id);
+      // Events.fire('peer-joined', peer);
+      // handle browsers that don't support RTCPeer
+    }
+  }
+
   _onPeers(data) {
     let peers = data.peers;
 
-    peers.forEach((peer) => {
-      if (this.peers[peer.id]) {
-        // handle existing peers
-        this.peers[peer.id].refresh();
-        return;
-      } else {
-        this.peers[peer.id] = new PeerConnection(this.server, peer.id);
-        // Events.fire('peer-joined', peer);
-        // handle browsers that don't support RTCPeer
-      }
-    });
+    peers.forEach((peer) => this.onPeer(peer));
   }
 
   _onSignal(message) {
@@ -852,6 +896,7 @@ class PeersUI {
   }
 
   onPeerJoined(peer) {
+    log$3("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
@@ -865,11 +910,14 @@ class PeersUI {
   }
 
   onPaste(e) {}
-  onFileProgress(e) {}
+
+  onFileProgress(data) {
+    let peer = document.getElementById(data.sender);
+    peer && peer.ui.setProgress(data.progress);
+  }
 
   clearPeers() {
     this.$el.childNodes.forEach((child) => {
-      log$3("clear child ", child);
       child.remove();
     });
   }
@@ -892,6 +940,7 @@ const app = new Application();
 
 /**
  * Todo:
- * 2. debug break in data transfer
- * 4. implement a FileChunker and a FileDigester to ease file transfer between peers
+ * 2. Display placeholder text intruction and icon when no peer is connected
+ * 1. implement a FileChunker and a FileDigester to ease file transfer between peers
+ * **. debug break in data transfer
  */

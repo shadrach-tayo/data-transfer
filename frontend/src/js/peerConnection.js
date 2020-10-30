@@ -38,7 +38,7 @@ class RTCPeer {
   }
 
   _deQueueFile() {
-    log("dequeue file -----------------", this._fileQueue.length, this._busy);
+    log("dequeue file -----", this._fileQueue.length, this._busy);
     if (!this._fileQueue.length) return;
     this._busy = true;
     let file = this._fileQueue.shift();
@@ -50,7 +50,7 @@ class RTCPeer {
   }
 
   sendText(text) {
-    this._sendJson({type: 'text', text})
+    this._sendJson({ type: "text", text });
   }
 
   sendFile(file) {
@@ -62,9 +62,6 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-    // create fileDigester to handle new files
-    // send message to indicate success full tranfer
-    // track progress
     
     let reader = new FileReader();
     reader.onload = (e) => {
@@ -97,13 +94,18 @@ class RTCPeer {
     // send chunk to filedigester
     if (this._fileDigester) {
       this._fileDigester.unchunk(chunk);
+      this._onDownloadProgress(this._fileDigester.progress);
+      // send progress to sender
+      if(this._fileDigester.progress <= 0.1) return;
+      this.sendProgress(this._fileDigester.progress)
     }
   }
 
   _onTransferComplete() {
+    // set progress to 1
+    this._onDownloadProgress(1);
     this._busy = false;
     this._deQueueFile();
-    // set progress to 1
     // remove file chunker if any
     // do necessary clean up
   }
@@ -126,13 +128,13 @@ class RTCPeer {
     let data = JSON.parse(message);
     // handle string type data
     switch (data.type) {
-      // handle progress
       case "text":
         log("new text ", data.text);
         Events.fire("receive-text", data.text);
         break;
-      // handle fileHeader
+      // handle progress
       case "progress":
+        this._onDownloadProgress(data.progress)
         break;
       // handle fileHeader
       case "file-header":
@@ -143,13 +145,21 @@ class RTCPeer {
         this._onTransferComplete();
     }
   }
+
+  sendProgress(progress) {
+    this._sendJson({type: 'progress', progress})
+  }
+
+  _onDownloadProgress(progress) {
+    Events.fire('file-progress', {sender: this.peerId, progress})
+  }
 }
 
 class PeerConnection extends RTCPeer {
   constructor(server, peerId) {
     super(peerId, server);
     // this.stream = stream;
-    this.config = RTC_Config;    
+    this.config = RTC_Config;
     if (!peerId) return;
     this._connect(this.peerId, true);
   }
@@ -189,7 +199,7 @@ class PeerConnection extends RTCPeer {
   _channelOpened(e) {
     // handle channel opened
     log("RTC: channel opened ", e);
-    this.channel = e.channel || e.target;
+    this.channel = e.target || e.channel;
     this.channel.onmessage = (e) => this._onMessage(e.data);
     this.channel.onerror = this._onChannelClosed;
   }
@@ -199,12 +209,13 @@ class PeerConnection extends RTCPeer {
     log("RTC: channel event ", e);
     this.channel = e.channel || e.target;
     this.channel.onmessage = (e) => this._onMessage(e.data);
-    this.channel.onerror = this._onChannelClosed;
+    this.channel.onerror = e => this._onChannelClosed(e);
+    this.channel.onclose = e => this._onChannelClosed(e);
   }
 
   _send(message) {
     if (!this.channel) this.refresh();
-    log("send ", message);
+    log("DC: send ", message, this.channel);
     this.channel.send(message);
   }
 
@@ -227,11 +238,9 @@ class PeerConnection extends RTCPeer {
   }
 
   _onDescription(desc) {
-    console.log("sdp ", desc);
     this.peerConnection
       .setLocalDescription(new RTCSessionDescription(desc))
       .then((_) => {
-        // console.log('description ', desc)
         this.sendSignal({ sdp: desc });
       })
       .catch((e) => this.onError(e));
@@ -246,7 +255,6 @@ class PeerConnection extends RTCPeer {
 
   onIceCandidate(evt) {
     if (!evt.candidate) return;
-    console.log("ice ", evt.candidate);
     this.sendSignal({ ice: evt.candidate });
   }
 
@@ -271,6 +279,7 @@ class PeerConnection extends RTCPeer {
   }
 
   _onChannelClosed(e) {
+    log('DC: channel', this.channel, e)
     if (!this.isCaller) return;
     this._connect(this.peerId, this.isCaller); // reconnect channel
   }
@@ -318,6 +327,14 @@ class PeerConnection extends RTCPeer {
   addIceCandidate(data) {
     log("ICE Candidate received - ", data.candidate);
     this.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+  }
+
+  _isConnected() {
+    return this.channel && this.channel.readystate === 'open'
+  }
+
+  _isConnecting() {
+    return this.channel && this.channel.readystate === 'connecting'
   }
 
   close() {
