@@ -51,7 +51,27 @@ body {
   
   overflow: hidden;
 }
-.peers {
+
+[data-peer="false"] .peers {
+  visibility: hidden;
+  height: 0;
+}
+
+[data-peer="true"] .no-peers {
+  visibility: hidden;
+  height: 0;
+}
+
+.no-peers {
+  flex-direction: column;
+  padding: 0 20px;
+}
+
+.network-icon {
+  max-width: 300px;
+}
+
+.peers, .no-peers {
   background-color: rgb(195, 204, 204);
   height: 90%;
   display: flex;

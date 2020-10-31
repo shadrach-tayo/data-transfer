@@ -936,13 +936,14 @@ class PeersManager {
 
   _onFileSelected(message) {
     // console.log("files-selected ", message);
-    log$3("file selected ", message.to, this.peers[message.to]);
+    // log("file selected ", message.to, this.peers[message.to]);
+
     // TODO: handle cases where peer isn't found
     this.peers[message.to].sendFiles(message.files);
   }
 
   _onPeerLeft(message) {
-    console.log("peer-left ", message);
+    // console.log("peer-left ", message);
     if (!this.peers[message.peerId]) return;
     const peer = this.peers[message.peerId];
     peer.close();
@@ -958,6 +959,7 @@ class PeersManager {
 class PeersUI {
   constructor() {
     this.$el = document.getElementById("peers");
+    this.$body = document.getElementsByTagName("body")[0];
     Events.on("peers", (e) => this.onPeersJoined(e.detail));
     Events.on("peer-left", (e) => this.onPeerLeft(e.detail));
     Events.on("peer-joined", (e) => this.onPeerJoined(e.detail));
@@ -970,6 +972,7 @@ class PeersUI {
     data.peers.forEach((peer) => {
       this.onPeerJoined(peer);
     });
+    this.togglePeerView();
   }
 
   onPeerJoined(peer) {
@@ -977,12 +980,23 @@ class PeersUI {
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
+    this.togglePeerView();
   }
 
   onPeerLeft(data) {
     const peer = document.getElementById(data.peerId);
     if (peer) {
       this.$el.removeChild(peer);
+    }
+    this.togglePeerView();
+  }
+
+  togglePeerView() {
+    let count = this.$el.childNodes.length;
+    if (count > 0) {
+      this.$body.setAttribute("data-peer", true);
+    } else {
+      this.$body.setAttribute("data-peer", false);
     }
   }
 
@@ -1017,7 +1031,6 @@ const app = new Application();
 
 /**
  * Todo:
- * 2. Display placeholder text intruction and icon when no peer is connected
- * 1. implement a FileChunker and a FileDigester to ease file transfer between peers
- * **. debug break in data transfer
+ * 1. Display placeholder text intruction and icon when no peer is connected  
+ * 2. Fallback to socket for sending files and texts if webRtc isn't supported
  */
