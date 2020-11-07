@@ -8,13 +8,6 @@ import { Http2ServerRequest } from "http2";
 const { uniqueNamesGenerator, animals, colors } = require('unique-names-generator');
 
 
-/* 
-{key: fs.readFileSync(path.join(__dirname, '/server.key'), 'utf-8'),
-   cert: fs.readFileSync(path.join(__dirname, '/server.crt'), 'utf-8')
-},
-*/
-
-
 function hash(text) {
     // A string hashing function based on Daniel J. Bernstein's popular 'times 33' hash algorithm.
     var h = 5381,
@@ -170,7 +163,7 @@ export class Server {
     }
 
     private handleSocketConnection(peer: Peer): void {
-        // console.log('connect ', peer.id)
+        console.log('connect ', peer.name, peer.hashedIp)
 
         this.joinRoom(peer);
 

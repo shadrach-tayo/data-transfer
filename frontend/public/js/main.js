@@ -156,7 +156,7 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-
+    log$1("send file ", file);
     // create new fileSender to send files
     this._fileSender = new FileSender(
       file,
@@ -648,6 +648,18 @@ document.copyText = (text) => {
 const log$3 = console.log;
 const webSocketConnectionURL = "wss://localhost:8000";
 
+const getSocketURL = () => {
+  let host = window.location.hostname;
+  let socketURL = "";
+  if (host === "locahost") {
+    socketURL = `wss://${host}:8000`;
+  } else {
+    socketURL = `wss://${host}:8000`;
+  }
+  log$3("socket url ", socketURL);
+  return socketURL;
+};
+
 function setLocalId(id) {
   // document.getElementById("localId").textContent = id;
 }
@@ -705,8 +717,8 @@ class Server {
 
   connectToWebSocket() {
     if (this.socket && this.socket.connected === true) return;
-
-    this.socket = io(webSocketConnectionURL);
+    log$3("url ", webSocketConnectionURL);
+    this.socket = io(getSocketURL());
 
     this.socket.on("connect", () => {
       console.log("connected... ", this.socket.id);
@@ -1029,8 +1041,32 @@ class Application {
 // Initialize application
 const app = new Application();
 
+const themeSwitch = document.querySelector(
+  '.theme_switch input[type="checkbox"]'
+);
+themeSwitch.addEventListener(
+  "change",
+  (e) => {
+    switchTheme(String(e.target.checked));
+    localStorage.setItem("data-theme", e.target.checked);
+  },
+  false
+);
+
+function switchTheme(dark = false) {
+  console.log("dark ", dark, typeof dark);
+  if (dark == "true") {
+    document.documentElement.setAttribute("data-theme", "dark");
+    if (!themeSwitch.checked) {
+      themeSwitch.checked = true;
+    }
+  } else {
+    document.documentElement.setAttribute("data-theme", "light");
+  }
+}
+
 /**
  * Todo:
- * 1. Display placeholder text intruction and icon when no peer is connected  
  * 2. Fallback to socket for sending files and texts if webRtc isn't supported
  */
+switchTheme(localStorage.getItem("data-theme"));

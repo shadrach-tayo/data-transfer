@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
-    <title>VidChat</title>
+    <title>TransApp</title>
     <link
       href="https://fonts.googleapis.com/css?family=Montserrat:300,400,500,700&display=swap"
       rel="stylesheet"
@@ -16,32 +16,34 @@
     <div class="container">
       <header class="header">
         <div class="logo-container">
-          <img src="./img/doge.png" alt="doge logo" class="logo-img" />
+          <img src="/img/paper-plane.svg" alt="trans app logo" class="logo-img" />
           <h1 class="logo-text">
-            Data<span class="logo-highlight">Trans</span>
+            Trans<span class="logo-highlight">App</span>
           </h1>
         </div>
+        <div class="theme_switch_container">
+  <label for="theme_switch" class="theme_switch">
+    <input type="checkbox" id="theme_switch">
+    <div class="slider"></div>
+  </label>
+</div>
       </header>
       <div class="content-container">
         <div class="peers" id="peers">         
         </div>
         <div class="no-peers">
-          <img src="./img/connected_world.svg" alt="" class="network-icon">
-          <p class="help-text">Open app in nearby devices and start sending files and texts</p>
-        </div>
-        <div class="details">
-          <!-- <p>
-            Your ID is: <strong><span id="localId"></span></strong>
-          </p> -->
-          <p>
-            You're known as <strong> <span id="peerName"></span></strong>
-          </p>
+          <img src="/img/connected_world.svg" alt="" class="network-icon">
+          <p class="help-text">Open app in nearby devices to start sending files and texts</p>
         </div>
       </div>
     </div>
+    <div class="details">
+      <p>
+        You're known as <strong> <span id="peerName"></span></strong>
+      </p>
+    </div>
     <!-- <div class="dialog">
       <div class="dialog-card">
-
       </div>
     </div> -->
     <!-- #receiveDialog -->

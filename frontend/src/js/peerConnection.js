@@ -61,7 +61,7 @@ class RTCPeer {
       mime: file.type,
     };
     this._sendJson(header);
-
+    log("send file ", file);
     // create new fileSender to send files
     this._fileSender = new FileSender(
       file,
