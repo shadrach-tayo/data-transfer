@@ -1047,21 +1047,23 @@ const themeSwitch = document.querySelector(
 themeSwitch.addEventListener(
   "change",
   (e) => {
-    switchTheme(String(e.target.checked));
-    localStorage.setItem("data-theme", e.target.checked);
+    switchTheme(e.target.checked);
   },
   false
 );
 
 function switchTheme(dark = false) {
-  console.log("dark ", dark, typeof dark);
-  if (dark == "true") {
+  // console.log("theme ", dark, typeof dark);
+  if (dark == true || dark == "true") {
     document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("data-theme", "true");
+
     if (!themeSwitch.checked) {
       themeSwitch.checked = true;
     }
   } else {
     document.documentElement.setAttribute("data-theme", "light");
+    localStorage.setItem("data-theme", "false");
   }
 }
 
