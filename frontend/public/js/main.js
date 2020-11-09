@@ -717,7 +717,7 @@ class Server {
 
   connectToWebSocket() {
     if (this.socket && this.socket.connected === true) return;
-    log$3("url ", webSocketConnectionURL);
+    log$3("url ", getSocketURL());
     this.socket = io(getSocketURL());
 
     this.socket.on("connect", () => {
@@ -855,7 +855,14 @@ class PeerUI {
 
   _icon() {
     // assign an icon based on the device type
-    return "#desktop-mac";
+    if (["Mac OS", "Win"].includes(this._peer.os)) return "#desktop-mac";
+    if (
+      ["Android", "iOS"].includes(this._peer.os) &&
+      this._peer.model === "iPad"
+    )
+      return "#tablet-mac";
+    if (["Android", "iOS"].includes(this._peer.os)) return "#phone-iphone";
+    return "#tablet-mac";
   }
 
   _onFileSelected(e) {
