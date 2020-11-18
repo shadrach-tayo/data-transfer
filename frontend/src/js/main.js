@@ -1,6 +1,11 @@
 import { PeerConnection } from "./peerConnection";
 import { Events } from "./utils";
-import { ReceiveFileDialog, ReceiveTextDialog, SendTextDialog } from "./ui";
+import {
+  ReceiveFileDialog,
+  ReceiveTextDialog,
+  SendTextDialog,
+  AddPeerDialog,
+} from "./ui";
 
 const log = console.log;
 const webSocketConnectionURL = "SOCKET_URL";
@@ -25,7 +30,7 @@ const CALL_STATES = {
 };
 
 function getUserLocalMedia(cameraConfig) {
-  console.log("config ", cameraConfig);
+  // console.log("config ", cameraConfig);
   return new Promise((resolve, reject) => {
     navigator.getWebCam =
       navigator.getUserMedia ||
@@ -70,6 +75,7 @@ class Server {
     );
 
     this.initializeSocketAndStream();
+    Events.on("connect-peer", (evt) => this._onConnectPeer(evt.detail));
   }
 
   initializeSocketAndStream() {
@@ -153,14 +159,26 @@ class Server {
         Events.fire("peer-joined", message.peer);
         break;
       case "signal":
-        // log("Signal", message.type);
+        log("Signal", message.type);
         Events.fire("signal", message);
+        break;
+      case "connect-peers":
+        console.log("connect peers ", message);
+        Events.fire("connect-peers", message);
+        break;
+      case "CONNECT_PEER_ERROR":
+        //  handle error by displaying a toast or alert
+        log("CONNECT_PEER_ERROR: ", message.message);
+        // Event.fire('connect-peer-error', message);
         break;
       default:
         break;
     }
   }
 
+  _onConnectPeer(data) {
+    this.send({ ...data, type: "connect-peer" });
+  }
   send(message) {
     console.log("send", message.type, message.to);
     this.socket.send(message);
@@ -241,7 +259,7 @@ class PeerUI {
 
   _icon() {
     // assign an icon based on the device type
-    if (["Mac OS", "Win"].includes(this._peer.os)) return "#desktop-mac";
+    if (["Mac OS", "Windows"].includes(this._peer.os)) return "#desktop-mac";
     if (
       ["Android", "iOS"].includes(this._peer.os) &&
       this._peer.model === "iPad"
@@ -305,6 +323,7 @@ class PeersManager {
     this.server = serverConnection;
     Events.on("signal", (evt) => this._onSignal(evt.detail));
     Events.on("peers", (evt) => this._onPeers(evt.detail));
+    Events.on("connect-peers", (evt) => this._onPeers(evt.detail));
     // Events.on("peer-joined", (e) => this.onPeer(e.detail));
     Events.on("files-selected", (evt) => this._onFileSelected(evt.detail));
     Events.on("peer-left", (evt) => this._onPeerLeft(evt.detail));
@@ -325,7 +344,6 @@ class PeersManager {
 
   _onPeers(data) {
     let peers = data.peers;
-
     peers.forEach((peer) => this.onPeer(peer));
   }
 
@@ -366,6 +384,7 @@ class PeersUI {
     this.$el = document.getElementById("peers");
     this.$body = document.getElementsByTagName("body")[0];
     Events.on("peers", (e) => this.onPeersJoined(e.detail));
+    Events.on("connect-peers", (e) => this.onConnectPeers(e.detail));
     Events.on("peer-left", (e) => this.onPeerLeft(e.detail));
     Events.on("peer-joined", (e) => this.onPeerJoined(e.detail));
     Events.on("paste", (e) => this.onPaste(e.detail));
@@ -380,11 +399,18 @@ class PeersUI {
     this.togglePeerView();
   }
 
+  onConnectPeers(data) {
+    data.peers.forEach((peer) => {
+      this.onPeerJoined(peer);
+    });
+    this.togglePeerView();
+  }
+
   onPeerJoined(peer) {
-    // log("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
+    log("peer joined ", peer.id);
     this.togglePeerView();
   }
 
@@ -397,7 +423,9 @@ class PeersUI {
   }
 
   togglePeerView() {
-    let count = this.$el.childNodes.length;
+    let children = [...this.$el.querySelectorAll(".peer")];
+    let count = children.length;
+    console.log('children ', children, 'count ', count)
     if (count > 0) {
       this.$body.setAttribute("data-peer", true);
     } else {
@@ -413,12 +441,11 @@ class PeersUI {
   }
 
   clearPeers() {
-    this.$el.childNodes.forEach((child) => {
-      child.remove();
-    });
+    let children = [...this.$el.querySelectorAll('peer')]
+    console.log('peers.... ', children)
+    children.forEach(child => child.remove())    
   }
 }
-
 class Application {
   constructor() {
     this.server = new Server();
@@ -427,6 +454,7 @@ class Application {
     this.receiveFileDialog = new ReceiveFileDialog();
     this.receiveTextDialog = new ReceiveTextDialog();
     this.sendTextDialog = new SendTextDialog();
+    this.addPeerDialog = new AddPeerDialog();
     log("app initialized ");
   }
 }
@@ -444,6 +472,14 @@ themeSwitch.addEventListener(
   },
   false
 );
+
+// dispatch add peer event if join peer button is clicked
+const joinPeers = [...document.querySelectorAll("div.add-peer")];
+joinPeers.forEach((joinPeer) => {
+  joinPeer.addEventListener("click", () => {
+    Events.fire("add-peer");
+  }, false);
+});
 
 function switchTheme(dark = false) {
   // console.log("theme ", dark, typeof dark);

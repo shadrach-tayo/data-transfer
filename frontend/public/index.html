@@ -22,18 +22,34 @@
           </h1>
         </div>
         <div class="theme_switch_container">
-  <label for="theme_switch" class="theme_switch">
-    <input type="checkbox" id="theme_switch">
-    <div class="slider"></div>
-  </label>
-</div>
+          <label for="theme_switch" class="theme_switch">
+            <input type="checkbox" id="theme_switch">
+            <div class="slider"></div>
+          </label>
+        </div>
       </header>
       <div class="content-container">
-        <div class="peers" id="peers">         
+        <div class="peers" id="peers">
+          <div class="add-peer">
+              <div class="icon-container">
+                <svg class="icon">
+                  <use xlink:href="#wifi-tethering" />
+                </svg>
+              </div>               
+              <div class="peer-name">Add Peer</div>
+          </div>    
         </div>
         <div class="no-peers">
           <img src="/img/connected_world.svg" alt="" class="network-icon">
           <p class="help-text">Open app in nearby devices to start sending files and texts</p>
+          <div class="add-peer peer">
+              <div class="icon-container">
+                <svg class="icon">
+                  <use xlink:href="#wifi-tethering" />
+                </svg>
+              </div>               
+              <div class="peer-name">Join Peer</div>
+          </div>
         </div>
       </div>
     </div>
@@ -82,7 +98,19 @@
           </form>
       </div>
     </div>
-
+    <!-- #addPeerDialog -->
+    <div class="dialog" id="addPeer">
+      <div class="dialog-card">
+          <h2>Add Peer</h2>
+          <form id="sendTextForm">
+            <input type="text" id="input-text" placeholder="Peer name" autofocus>
+            <div class="button-row align-right">
+              <button class="button" close>close</button>
+              <button class="button" type="submit">Add</button>
+            </div>
+          </form>
+      </div>
+    </div>
     <!-- SVG LIBRARY -->
     <svg style="display: none">
       <symbol id="wifi-tethering" viewBox="0 0 24 24">

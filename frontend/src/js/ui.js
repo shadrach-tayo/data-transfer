@@ -157,7 +157,33 @@ class SendTextDialog extends Dialog {
   }
 }
 
-export { ReceiveFileDialog, ReceiveTextDialog, SendTextDialog };
+class AddPeerDialog extends Dialog {
+  constructor() {
+    super("addPeer");
+    this.$text = this.$el.querySelector("#input-text");
+    this.$form = this.$el.querySelector("#sendTextForm");
+    this.$form.addEventListener("submit", (e) => this._onSendText(e));
+    Events.on("add-peer", (e) => this._onNewText());
+  }
+
+  _onNewText() {
+    log("AddPeer: ");
+    // this._receipient = receipient;
+    this.show();
+    this.$text.setSelectionRange(0, this.$text.value.length);
+  }
+
+  _onSendText(e) {
+    e.preventDefault();
+    Events.fire("connect-peer", {
+      host: this.$text.value,
+      hostType: "name",
+    });
+    this.hide();
+  }
+}
+
+export { ReceiveFileDialog, ReceiveTextDialog, SendTextDialog, AddPeerDialog };
 
 document.copyText = (text) => {
   const span = document.createElement("span");

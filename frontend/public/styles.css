@@ -1,5 +1,3 @@
-
-
 :root {
   --primary-color: rgb(185, 163, 219);
   --secondary-color: #8a2be2ba;
@@ -31,7 +29,6 @@ body {
   overflow: hidden;
   background-color: var(--primary-color);
 }
-
 
 .theme_switch_container {
   background: #444;
@@ -164,7 +161,16 @@ input:checked + .slider::before {
 
 .peer {
   width: 120px;
-  height: 120px;
+  /* min-height: 120px; */
+}
+
+.add-peer {
+  width: 120px;
+  height: 114px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .peer label {
@@ -187,7 +193,8 @@ input:checked + .slider::before {
   justify-content: center;
 }
 
-.peer .icon-container {
+.peer .icon-container,
+.add-peer .icon-container {
   /* width: 40px; */
   /* height: 40px; */
   padding: 12px;
@@ -200,7 +207,8 @@ input:checked + .slider::before {
   cursor: pointer;
 }
 
-.peer .icon {
+.peer .icon,
+.add-peer .icon {
   /* font-size: 24px; */
   fill: currentColor;
   width: 40px;

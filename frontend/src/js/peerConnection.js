@@ -313,8 +313,9 @@ class PeerConnection extends RTCPeer {
   }
 
   refresh() {
-    if (this.channel && this.channel.readystate === "open") return;
-    if (this.channel && this.channel.readystate === "connection") return;
+    if (this.channel && this.channel.readyState === "open") return;
+    if (this.channel && this.channel.readyState === "connecting") return;
+    console.log("refresh...", this.channel, this.channel.readyState);
     this._connect(this.peerId, this.isCaller);
   }
 

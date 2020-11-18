@@ -1,6 +1,7 @@
 import express, { Application } from "express";
 import socketIO, { Server as SocketIOServer } from "socket.io";
-import { createServer, Server as HTTPServer } from "https"
+import { createServer, Server as HTTPServer } from "https";
+
 import path from "path"
 import fs from 'fs'
 import parser from "ua-parser-js";
@@ -24,6 +25,7 @@ class Peer {
     name: any;
     hashedIp: number;
     private ip;
+    connectedRooms: string[] = [];
 
 
     constructor(socket) {
@@ -37,6 +39,13 @@ class Peer {
         return this.name
     }
 
+    getIp() {
+        return this.ip;
+    }
+
+    removeRoom(roomKey: string) {
+        this.connectedRooms = this.connectedRooms.filter(key => key != roomKey);
+    }
 
     private setIp(request: Http2ServerRequest) {
 
@@ -93,6 +102,7 @@ class Peer {
         return uuid;
     };
 }
+
 export class Server {
     private httpServer: HTTPServer;
     private app: Application;
@@ -130,6 +140,26 @@ export class Server {
         })
     }
 
+    locateHostPeer(key, type: string = 'name') {
+        let peer;
+        if (type.includes('name')) {
+            // find peer by name and return peer
+            for (const otherPeerId in this.peers) {
+                console.log('peer ', otherPeerId)
+                let otherPeer = this.peers[otherPeerId];
+                if (otherPeer.getInfo().displayName.toLowerCase() === key.toLowerCase()) {
+                    peer = otherPeer;
+                    break;
+                }
+            }
+
+        } else if (type.includes('id')) {
+            // find peer by id and return peer
+            peer = this.peers.find(otherPeer => otherPeer.id === key)
+        }
+        return peer;
+    }
+
     notifyDevices() {
         const locations = {};
 
@@ -163,9 +193,10 @@ export class Server {
     }
 
     private handleSocketConnection(peer: Peer): void {
-        console.log('connect ', peer.name, peer.hashedIp)
+        console.log('connect ', peer.name.displayName, peer.hashedIp)
 
-        this.joinRoom(peer);
+        this.createRooms(peer);
+        this.joinRoom(peer, peer.getIp(), 'peers');
 
         peer.socket.send({ name: peer.name.displayName, type: 'displayName' })
 
@@ -182,20 +213,35 @@ export class Server {
             case 'disconnect':
                 this.leaveRoom(sender);
                 break;
+            case 'connect-peer':
+                const remotePeer = this.locateHostPeer(message.host, message.hostType)
+                this.connectToPeer(sender, remotePeer)
+                break;
         }
 
-        if (message.to && sender.ip) {
-            let recipientId = message.to;
-            let recipient = this.rooms[sender.ip][recipientId];
+        const keyOptions = [sender.ip].concat(sender.connectedRooms);
 
-            delete message.to;
-            message.sender = sender.id;
-            if (recipient) {
-                // console.log('send message ', message.sender)
-                this.send(recipient, message)
+        for (const roomKey of keyOptions) {
+            if (message.to && this.rooms[roomKey]) {
+                let data = { ...message }
+                if (!this.rooms[roomKey][message.to]) continue;
+                let recipientId = message.to;
+                let recipient = this.rooms[roomKey][recipientId];
+
+                delete data.to;
+                data.sender = sender.id;
+                if (recipient) {
+                    this.send(recipient, data)
+                }
             }
         }
+
     }
+
+    forEachKey(keys, fn) {
+        keys.forEach(key => fn(key))
+    }
+
 
     send(peer, message) {
         if (!peer) return;
@@ -203,53 +249,108 @@ export class Server {
         peer.socket.send(message)
     }
 
-    private joinRoom(peer) {
+    private connectToPeer(hostPeer, remotePeer) {
+        // notify remote peer if host peer is not found/online on the server
+        if (!remotePeer) return this.send(hostPeer, { type: 'CONNECT_PEER_ERROR', message: 'The user you\'re trying to connect is offline' })
+
+        // prevent peers of the same ip from connecting
+        if (hostPeer.ip === remotePeer.ip) return this.send(hostPeer, { type: 'CONNECT_PEER_ERROR', message: 'User is on the same network' })
+
+        // send new peer info to existing peers
+        this.notifiyOtherPeers({ peerInfo: remotePeer.getInfo(), key: hostPeer.id })
+
+        // notify peer about the other peers
+        const otherPeers = [];
+        for (const otherPeerId in this.rooms[hostPeer.id]) {
+            otherPeers.push(this.rooms[hostPeer.id][otherPeerId].getInfo());
+        }
+
+        // notify host peer about remote peer
+        this.send(remotePeer, { type: 'connect-peers', peers: otherPeers });
+
+        // add new peer to the room
+        this.rooms[hostPeer.id][remotePeer.id] = remotePeer;
+
+        // add roomKey to peers connectedRooms
+        if (!hostPeer.connectedRooms.includes(hostPeer.id)) hostPeer.connectedRooms.push(hostPeer.id)
+        if (!remotePeer.connectedRooms.includes(hostPeer.id)) remotePeer.connectedRooms.push(hostPeer.id)
+
+
+    }
+
+    private createRooms(peer) {
+        if (!this.rooms[peer.id]) {
+            this.rooms[peer.id] = {}
+            this.rooms[peer.id][peer.id] = peer;
+        }
+        if (!this.rooms[peer.ip]) {
+            this.rooms[peer.ip] = {}
+            // this.rooms[peer.ip][peer.ip] = peer
+        }
+    }
+
+
+    private joinRoom(peer, key = peer.ip, type) {
         if (!this.peers[peer.id]) {
             this.peers[peer.id] = peer;
         }
 
-        if (!this.rooms[peer.ip]) {
-            this.rooms[peer.ip] = {};
-        }
+        // return; // remove line
+        // if (type === 'peers') return;
 
         // notify peer of other peers
-        for (const otherPeerId in this.rooms[peer.ip]) {
-            let otherPeer = this.rooms[peer.ip][otherPeerId]
-            // if(otherPeer.id == peer.id) continue;
-            this.send(otherPeer, { type: 'peer-joined', peer: peer.getInfo() })
-        }
+        this.notifiyOtherPeers({ peerInfo: peer.getInfo(), key })
+
 
         // notify peer about the other peers
         const otherPeers = [];
-        for (const otherPeerId in this.rooms[peer.ip]) {
-            otherPeers.push(this.rooms[peer.ip][otherPeerId].getInfo());
+        for (const otherPeerId in this.rooms[key]) {
+            otherPeers.push(this.rooms[key][otherPeerId].getInfo());
         }
-
+        console.log('others ', otherPeers)
         this.send(peer, {
-            type: 'peers',
+            type,
             peers: otherPeers
         });
 
 
-        this.rooms[peer.ip][peer.id] = peer;
+        this.rooms[key][peer.id] = peer;
+
+        // add roomKey to peer's maintained list of connected rooms
+        if (!peer.connectedRooms.includes(key)) peer.connectedRooms.push(key);
+    }
+
+    notifiyOtherPeers({ peerInfo, key }) {
+        // notify peer of other peers
+        for (const otherPeerId in this.rooms[key]) {
+            let otherPeer = this.rooms[key][otherPeerId]
+            // console.log('peer-joined ', peerInfo, otherPeer.getInfo())
+            this.send(otherPeer, { type: 'peer-joined', peer: peerInfo })
+        }
     }
 
     private leaveRoom(peer) {
-        if (!this.rooms[peer.ip] || !this.rooms[peer.ip][peer.id]) return;
+        // using peer's connected room to detect peer's cuurent active rooms
+        for (const roomKey of peer.connectedRooms) {
+            if (!this.rooms[roomKey] || !this.rooms[roomKey][peer.id]) return;
 
-        delete this.rooms[peer.ip][peer.id];
-        peer.socket.disconnect();
-        delete this.peers[peer.id];
-
-        if (!Object.keys(this.rooms[peer.ip]).length) {
-            delete this.rooms[peer.ip]
+            delete this.rooms[roomKey][peer.id];
+            peer.socket.disconnect();
             delete this.peers[peer.id];
-        } else {
-            for (const id in this.rooms[peer.ip]) {
-                let otherPeer = this.rooms[peer.ip][id];
-                this.send(otherPeer, { type: 'peer-left', peerId: peer.id })
+
+            if (!Object.keys(this.rooms[roomKey]).length) {
+                delete this.rooms[roomKey]
+                delete this.peers[peer.id];
+            } else {
+                for (const id in this.rooms[roomKey]) {
+                    let otherPeer = this.rooms[roomKey][id];
+                    this.send(otherPeer, { type: 'peer-left', peerId: peer.id })
+                }
             }
+
+            peer.removeRoom(roomKey);
         }
+
     }
 
     public listen(callback: (port: any) => void): void {

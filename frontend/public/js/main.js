@@ -1,3 +1,5 @@
+
+(function(l, r) { if (l.getElementById('livereloadscript')) return; r = l.createElement('script'); r.async = 1; r.src = '//' + (window.location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1'; r.id = 'livereloadscript'; l.getElementsByTagName('head')[0].appendChild(r) })(window.document);
 const log = console.log;
 
 class Events {
@@ -406,8 +408,9 @@ class PeerConnection extends RTCPeer {
   }
 
   refresh() {
-    if (this.channel && this.channel.readystate === "open") return;
-    if (this.channel && this.channel.readystate === "connection") return;
+    if (this.channel && this.channel.readyState === "open") return;
+    if (this.channel && this.channel.readyState === "connecting") return;
+    console.log("refresh...", this.channel, this.channel.readyState);
     this._connect(this.peerId, this.isCaller);
   }
 
@@ -615,6 +618,32 @@ class SendTextDialog extends Dialog {
   }
 }
 
+class AddPeerDialog extends Dialog {
+  constructor() {
+    super("addPeer");
+    this.$text = this.$el.querySelector("#input-text");
+    this.$form = this.$el.querySelector("#sendTextForm");
+    this.$form.addEventListener("submit", (e) => this._onSendText(e));
+    Events.on("add-peer", (e) => this._onNewText());
+  }
+
+  _onNewText() {
+    log$2("AddPeer: ");
+    // this._receipient = receipient;
+    this.show();
+    this.$text.setSelectionRange(0, this.$text.value.length);
+  }
+
+  _onSendText(e) {
+    e.preventDefault();
+    Events.fire("connect-peer", {
+      host: this.$text.value,
+      hostType: "name",
+    });
+    this.hide();
+  }
+}
+
 document.copyText = (text) => {
   const span = document.createElement("span");
   span.textContent = text;
@@ -644,7 +673,7 @@ document.copyText = (text) => {
 };
 
 const log$3 = console.log;
-const webSocketConnectionURL = "";
+const webSocketConnectionURL = "wss://localhost:8000";
 
 const getSocketURL = () => {
   let host = window.location.hostname;
@@ -684,6 +713,7 @@ class Server {
     );
 
     this.initializeSocketAndStream();
+    Events.on("connect-peer", (evt) => this._onConnectPeer(evt.detail));
   }
 
   initializeSocketAndStream() {
@@ -767,12 +797,24 @@ class Server {
         Events.fire("peer-joined", message.peer);
         break;
       case "signal":
-        // log("Signal", message.type);
+        log$3("Signal", message.type);
         Events.fire("signal", message);
+        break;
+      case "connect-peers":
+        console.log("connect peers ", message);
+        Events.fire("connect-peers", message);
+        break;
+      case "CONNECT_PEER_ERROR":
+        //  handle error by displaying a toast or alert
+        log$3("CONNECT_PEER_ERROR: ", message.message);
+        // Event.fire('connect-peer-error', message);
         break;
     }
   }
 
+  _onConnectPeer(data) {
+    this.send({ ...data, type: "connect-peer" });
+  }
   send(message) {
     console.log("send", message.type, message.to);
     this.socket.send(message);
@@ -853,7 +895,7 @@ class PeerUI {
 
   _icon() {
     // assign an icon based on the device type
-    if (["Mac OS", "Win"].includes(this._peer.os)) return "#desktop-mac";
+    if (["Mac OS", "Windows"].includes(this._peer.os)) return "#desktop-mac";
     if (
       ["Android", "iOS"].includes(this._peer.os) &&
       this._peer.model === "iPad"
@@ -917,6 +959,7 @@ class PeersManager {
     this.server = serverConnection;
     Events.on("signal", (evt) => this._onSignal(evt.detail));
     Events.on("peers", (evt) => this._onPeers(evt.detail));
+    Events.on("connect-peers", (evt) => this._onPeers(evt.detail));
     // Events.on("peer-joined", (e) => this.onPeer(e.detail));
     Events.on("files-selected", (evt) => this._onFileSelected(evt.detail));
     Events.on("peer-left", (evt) => this._onPeerLeft(evt.detail));
@@ -937,7 +980,6 @@ class PeersManager {
 
   _onPeers(data) {
     let peers = data.peers;
-
     peers.forEach((peer) => this.onPeer(peer));
   }
 
@@ -978,6 +1020,7 @@ class PeersUI {
     this.$el = document.getElementById("peers");
     this.$body = document.getElementsByTagName("body")[0];
     Events.on("peers", (e) => this.onPeersJoined(e.detail));
+    Events.on("connect-peers", (e) => this.onConnectPeers(e.detail));
     Events.on("peer-left", (e) => this.onPeerLeft(e.detail));
     Events.on("peer-joined", (e) => this.onPeerJoined(e.detail));
     Events.on("paste", (e) => this.onPaste(e.detail));
@@ -992,11 +1035,18 @@ class PeersUI {
     this.togglePeerView();
   }
 
+  onConnectPeers(data) {
+    data.peers.forEach((peer) => {
+      this.onPeerJoined(peer);
+    });
+    this.togglePeerView();
+  }
+
   onPeerJoined(peer) {
-    // log("peer joined ", peer);
     if (document.getElementById(peer.id)) return;
     let peerUI = new PeerUI(peer);
     this.$el.appendChild(peerUI.$el);
+    log$3("peer joined ", peer.id);
     this.togglePeerView();
   }
 
@@ -1009,7 +1059,9 @@ class PeersUI {
   }
 
   togglePeerView() {
-    let count = this.$el.childNodes.length;
+    let children = [...this.$el.querySelectorAll(".peer")];
+    let count = children.length;
+    console.log('children ', children, 'count ', count);
     if (count > 0) {
       this.$body.setAttribute("data-peer", true);
     } else {
@@ -1025,12 +1077,11 @@ class PeersUI {
   }
 
   clearPeers() {
-    this.$el.childNodes.forEach((child) => {
-      child.remove();
-    });
+    let children = [...this.$el.querySelectorAll('peer')];
+    console.log('peers.... ', children);
+    children.forEach(child => child.remove());    
   }
 }
-
 class Application {
   constructor() {
     this.server = new Server();
@@ -1039,6 +1090,7 @@ class Application {
     this.receiveFileDialog = new ReceiveFileDialog();
     this.receiveTextDialog = new ReceiveTextDialog();
     this.sendTextDialog = new SendTextDialog();
+    this.addPeerDialog = new AddPeerDialog();
     log$3("app initialized ");
   }
 }
@@ -1056,6 +1108,14 @@ themeSwitch.addEventListener(
   },
   false
 );
+
+// dispatch add peer event if join peer button is clicked
+const joinPeers = [...document.querySelectorAll("div.add-peer")];
+joinPeers.forEach((joinPeer) => {
+  joinPeer.addEventListener("click", () => {
+    Events.fire("add-peer");
+  }, false);
+});
 
 function switchTheme(dark = false) {
   // console.log("theme ", dark, typeof dark);
