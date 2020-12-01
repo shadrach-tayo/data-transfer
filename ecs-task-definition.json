@@ -1,0 +1,24 @@
+{
+    "family": "trans-app",
+    "executionRoleArn": "arn:aws:iam::751808579985:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "containerDefinitions": [
+        {
+            "name": "trans-app",
+            "image": "751808579985.dkr.ecr.us-east-1.amazonaws.com/trans-app:latest",
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true
+        }
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "1024"
+}
