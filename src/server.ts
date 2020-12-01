@@ -118,10 +118,12 @@ export class Server {
 
     private initialize(): void {
         this.app = express();
-        this.httpServer = createServer({
+        this.httpServer = createServer(
+        /* {
             key: fs.readFileSync(path.join(process.cwd(), '/server.key'), 'utf-8'),
             cert: fs.readFileSync(path.join(process.cwd(), '/server.crt'), 'utf-8')
-        }, this.app);
+        },
+        */ this.app);
         this.configureApp()
         this.handleRoutes()
 
