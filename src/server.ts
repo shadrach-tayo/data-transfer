@@ -110,7 +110,7 @@ export class Server {
     private rooms: any = {}
     private peers: any = {}
 
-    private readonly DEFAULT_PORT = process.env.PORT || 8000;
+    private readonly DEFAULT_PORT = 8000;
 
     constructor() {
         this.initialize();
