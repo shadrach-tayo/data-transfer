@@ -9,4 +9,6 @@ COPY . ./
 
 RUN npm run build:prod
 
-CMD [ "npm", "run", "start" ]
+EXPOSE 8000
+
+CMD [ "npm", "start" ]
