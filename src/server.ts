@@ -146,8 +146,7 @@ export class Server {
         let peer;
         if (type.includes('name')) {
             // find peer by name and return peer
-            for (const otherPeerId in this.peers) {
-                console.log('peer ', otherPeerId)
+            for (const otherPeerId in this.peers) {                
                 let otherPeer = this.peers[otherPeerId];
                 if (otherPeer.getInfo().displayName.toLowerCase() === key.toLowerCase()) {
                     peer = otherPeer;
@@ -169,8 +168,7 @@ export class Server {
             let peer = this.peers[id];
             locations[peer.hashedIp] = locations[peer.hashedIp] || [];
             locations[peer.hashedIp].push({ socket: peer.socket, name: peer.name })
-        }
-        // console.log('notifiy buddies ', locations)
+        }        
 
         Object.keys(locations).forEach(ip => {
             let location = locations[ip]
@@ -195,7 +193,6 @@ export class Server {
     }
 
     private handleSocketConnection(peer: Peer): void {
-        console.log('connect ', peer.name.displayName, peer.hashedIp)
 
         this.createRooms(peer);
         this.joinRoom(peer, peer.getIp(), 'peers');
@@ -295,10 +292,7 @@ export class Server {
     private joinRoom(peer, key = peer.ip, type) {
         if (!this.peers[peer.id]) {
             this.peers[peer.id] = peer;
-        }
-
-        // return; // remove line
-        // if (type === 'peers') return;
+        }        
 
         // notify peer of other peers
         this.notifiyOtherPeers({ peerInfo: peer.getInfo(), key })
@@ -309,7 +303,6 @@ export class Server {
         for (const otherPeerId in this.rooms[key]) {
             otherPeers.push(this.rooms[key][otherPeerId].getInfo());
         }
-        console.log('others ', otherPeers)
         this.send(peer, {
             type,
             peers: otherPeers
@@ -355,8 +348,7 @@ export class Server {
 
     }
 
-    public listen(callback: (port: any) => void): void {
-        console.log('port ', this.DEFAULT_PORT)
+    public listen(callback: (port: any) => void): void {        
         this.httpServer.listen(this.DEFAULT_PORT, () => callback(this.DEFAULT_PORT))
     }
 };
