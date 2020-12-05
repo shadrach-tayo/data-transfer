@@ -56,7 +56,7 @@ jobs:
       id: build-image
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: next-uk-post-codes
+        ECR_REPOSITORY: trans-app
         IMAGE_TAG: latest
       run: |
         # Build a docker container and
